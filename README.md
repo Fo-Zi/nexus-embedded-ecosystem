@@ -64,6 +64,7 @@ All of these points and probably others that I am missing, pushed me to create t
 
 → [Detailed pain points & experiences](docs/motivation.md) (🗓️ Planned)
 
+---
 ### 🎯 Goals
 
 - **Provide platform-independent interfaces that drivers can depend on**
@@ -147,7 +148,132 @@ More platforms and drivers will come as the architecture stabilizes.
 
 ---
 
-## 🔄 Development Philosophy
+## 🚀 Roadmap
+
+### Phase 1: Foundation & Core Interface ✅ *Completed*
+
+**Goal**: Establish the core interfaces, and necessary scripts to get a buid going
+
+#### 1.1 Core HAL Interface 
+- ✅ **`nexus-hal-interface`**
+  - I2C master operations (sync only)
+  - SPI master operations (sync only)  
+  - GPIO pin control
+  - UART basic opeST7789 TFTrations
+  - Common error types and timeouts
+  - State management patterns
+
+#### 1.2 Build System & Dependencies
+- ✅ **CMake and Manifest files**
+  - West manifest structure
+  - CMake integration patterns
+  - Versioning strategy
+
+### Phase 2: Basic Drivers and HAL implementation 🏗️ *In progress*
+
+**Goal**: Test the interface with basic drivers and a high level HAL wrapper implementation ; Analyze the weak points of the interface, and
+modify/iterate until reaching a comfortable while portable approach.
+
+#### 2.1 High-Level Framework Wrapper
+- ✅ **`nexus-hal-esp32-idf`** 
+  - Wraps ESP-IDF peripheral drivers
+  - Maintains ESP-IDF ecosystem compatibility
+  - Complete tooling integration (idf.py build/flash/monitor)
+     
+#### 2.2 I2C EEPROM Driver (eeprom-24c32)
+- ✅ **`nexus-eeprom-24c32`**
+  - Implement the driver, depending exclusively on the `nexus-hal-interface`
+  - Implement basic unit-tests for it, to validate the driver and mocks of the interface
+  - Analyze how comfortable is the `I2C interface` to use
+
+#### 2.3 DHT11 Driver 🏗️ *In progress*
+- [ ] **`nexus-dth11`**
+  - Implement the driver, depending exclusively on the `nexus-hal-interface`
+  - Implement basic unit-tests for it, to validate the driver and mocks of the interface
+  - Analyze how comfortable are the `pin` and `delay interfaces` to use
+
+### Phase 3: More Drivers and a Lower Level HAL Implementation 🗓️ *Planned*
+
+**Goal**: Test the interface with drivers that depend on other interfaces, as well as a Bare Metal HAL implementation ; Analyze how the HAL interface fits and interact with
+a low level implementation
+
+#### 3.1 Bare-Metal Implementation 🗓️ *Planned*
+- [ ] **`nexus-hal-stm32f407vg`** (or similar popular MCU)
+  - Register-level implementation (No external HALs, no framework)
+  - Basic necessary complementary tooling to build/flash/debug:
+    - Linker scripts
+    - OpenOCD configuration
+    - Startup code
+    - CMake integration with flash/debug targets
+
+#### 3.2 Passive Buzz (PWM) Driver 🗓️ *Planned*
+- [ ] **`nexus-006ky`** 
+  - This will depend on `PWM interface`, which will need to be implemented on `nexus-hal-interface`
+  - An implementation of `PWM interface` needs then to be developed
+  - Then the driver can be tested both through software and hardware
+
+### Phase 4: Framework Adapter HAL Implementation 🗓️ *Planned*
+
+**Goal**: Support an MCU through CMSIS, and design a scalable approach to ease and facilitate adding support for new MCUs already supported in the framework
+
+#### 4.1 CMSIS Framework Adapter  
+- [ ] **`nexus-hal-cmsis-core`**
+  - Support at least one MCU through [CMSIS core](https://arm-software.github.io/CMSIS_5/Core/html/index.html)
+  - Create a template system to facilitate adding support for new MCUs
+
+- #### 4.2 Photoresistor (ADC) Driver 🗓️ *Planned*
+- [ ] **`nexus-018ky`** 
+  - This will depend on `ADC interface`, which will need to be implemented on `nexus-hal-interface`
+  - An implementation of `ADC interface` needs then to be developed
+  - Then the driver can be tested both through software and hardware
+
+### Phase 5: Portable Project and Documentation 🗓️ *Planned* 
+
+**Goal**: To create a project based on the Ecosystem, showing the Platform Integration Layer, SOLID principles, and
+how to build the project for different supported platforms ; To document the approach and patterns used 
+
+- #### 5.1 Showcase Project 🗓️ *Planned*
+- [ ] **`nexus-showcase-project`**
+  - A project that showcases how the Ecosystem was envisioned
+  - To provide easy-to-use commands to compile and change the target platform
+  - To apply SOLID principles throughout the project, and how they fit with the ecosystem
+  - To use a modern approach, with CI,automated testing,automated doc, etc
+
+- #### 5.2 Documentation 🏗️ *In progress*
+- [ ] **`nexus-embedded-ecosystem`**
+  - General Documentation:
+      - Architecture
+      - Design decisions and tradeoffs
+      - Basic Guides
+  - To document the Showcase Project and Patterns used
+
+### Optional Advanced Features 🔮 *Future*
+  
+#### Display Driver (ST7789 TFT) 🔮 *Future*
+- [ ] **`nexus-st7789`**
+  - Implement the driver, depending exclusively on the `nexus-hal-interface`
+  - Implement basic unit-tests for it, to validate the driver and mocks of the interface
+  - Analyze how comfortable is the `SPI interface` to use
+    
+#### Power Management Interface 🔮 *Future*
+- [ ] **`nexus-hal-interface`**
+  - Power management is usually HIGHLY dependant on the platform, but in practice not more
+    than 3-4 power modes are used (Like for example: normal, light-sleep, deep-sleep, stand-by ).
+  - An interesting idea would be to abstract these modes, and to provide some way for the
+    Platform Integration Layer to decide on "the how" (i.e. what set of peripherals,clocks, and interrupts are
+    enabled/disabled for each)
+
+#### Modern C++ Approach 🔮 *Future*
+- [ ] **`nexus-hal-interface-cpp`,`nexus-hal-***-cpp`**
+  - To create a pure modern C++ interface version of the NHAL. Using features like: Namespaces ,Templates,
+    template specialization, concepts, constexpr, variants, optionals, etc. 
+  - Compile-time code generation and metaprogramming would be a great fit for frameworks that
+    need to be generic/well abstracted, while not losing efficiency in the process.
+  - The Platform Integration Layer could be implemented in a much cleaner way using this approach. Even
+    with some code generation
+    
+
+## 🔄 Last words
 
 This is a work in progress. The interfaces will change, and I'll probably discover better approaches as I build more drivers and support more platforms. But that's the point - to experiment and learn what actually works in practice.
 
