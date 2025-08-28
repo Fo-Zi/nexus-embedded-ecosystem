@@ -159,7 +159,7 @@ More platforms and drivers will come as the architecture stabilizes.
   - I2C master operations (sync only)
   - SPI master operations (sync only)  
   - GPIO pin control
-  - UART basic opeST7789 TFTrations
+  - UART basic operations
   - Common error types and timeouts
   - State management patterns
 
