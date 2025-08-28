@@ -221,31 +221,43 @@ a low level implementation
   - Support at least one MCU through [CMSIS core](https://arm-software.github.io/CMSIS_5/Core/html/index.html)
   - Create a template system to facilitate adding support for new MCUs
 
-- #### 4.2 Photoresistor (ADC) Driver 🗓️ *Planned*
+#### 4.2 Photoresistor (ADC) Driver 🗓️ *Planned*
 - [ ] **`nexus-018ky`** 
   - This will depend on `ADC interface`, which will need to be implemented on `nexus-hal-interface`
   - An implementation of `ADC interface` needs then to be developed
   - Then the driver can be tested both through software and hardware
 
-### Phase 5: Portable Project and Documentation 🗓️ *Planned* 
+### Phase 5: Portable Project, Documentation and First stable release 🗓️ *Planned* 
 
 **Goal**: To create a project based on the Ecosystem, showing the Platform Integration Layer, SOLID principles, and
-how to build the project for different supported platforms ; To document the approach and patterns used 
+how to build the project for different supported platforms ; To document the approach and patterns used ; To release the first
+stable version of the HAL Interface!
 
-- #### 5.1 Showcase Project 🗓️ *Planned*
+#### 5.1 Showcase Project 🗓️ *Planned*
 - [ ] **`nexus-showcase-project`**
   - A project that showcases how the Ecosystem was envisioned
   - To provide easy-to-use commands to compile and change the target platform
   - To apply SOLID principles throughout the project, and how they fit with the ecosystem
   - To use a modern approach, with CI,automated testing,automated doc, etc
 
-- #### 5.2 Documentation 🏗️ *In progress*
+#### 5.2 Documentation 🏗️ *In progress*
 - [ ] **`nexus-embedded-ecosystem`**
   - General Documentation:
       - Architecture
       - Design decisions and tradeoffs
       - Basic Guides
   - To document the Showcase Project and Patterns used
+
+#### 5.3 🚀 First Stable Version Release v1.0.0 🗓️ *Planned*
+- [ ] **`nexus-hal-interface` v1.0.0**
+  - At this point, there should be enough experimentation to be
+    able to release the first stable version.
+  - Does it mean that the interface will not evolve since this point?
+    No. It means:
+    - Core interfaces have been tested and will likely not be modified.
+    - Advanced or more specific interfaces can be designed and added, as long as
+      they don't break other components (CI will be in place for this)
+    
 
 ### Optional Advanced Features 🔮 *Future*
   
@@ -257,7 +269,7 @@ how to build the project for different supported platforms ; To document the app
     
 #### Power Management Interface 🔮 *Future*
 - [ ] **`nexus-hal-interface`**
-  - Power management is usually HIGHLY dependant on the platform, but in practice not more
+  - Power management is usually HIGHLY dependant on the platform, but in practice, usually not more
     than 3-4 power modes are used (Like for example: normal, light-sleep, deep-sleep, stand-by ).
   - An interesting idea would be to abstract these modes, and to provide some way for the
     Platform Integration Layer to decide on "the how" (i.e. what set of peripherals,clocks, and interrupts are
