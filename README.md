@@ -135,11 +135,21 @@ nexus-hal-esp32 / nexus-hal-stm32 ← Platform implementations
 
 ## 🛠️ Development Workflow & Tooling
 
-While the ecosystem's modular architecture offers flexibility, I recognize that **unified tooling** is essential for productivity. To address the "this is not an SDK" challenge mentioned above, I've developed West extension commands that provide consistent build and flash operations across all ecosystem components.
+Since there's a core HAL interface that allows flexibility to have different HAL implementations for different MCUs/Frameworks/etc, it would be ideal to offer "standard" command to:
+- Build
+- Flash
+- Pull dependencies
 
 ### Unified Build System
 
-I've integrated [West](https://docs.zephyrproject.org/latest/west/index.html) to automatically detect project types and provide consistent commands. The commands are implemented in the [`nexus-hal-interface`](https://github.com/Fo-Zi/nexus-hal-interface) repository - while this might seem odd at first, it makes sense because this is the common dependency shared across all projects in the ecosystem:
+To achieve the previous goals, I've decided to use: [West](https://docs.zephyrproject.org/latest/west/index.html) , the tool Zephyr uses as a core tool for their RTOS. I believe it's the ideal tool for this since:
+- It allows you to declare dependency manifests, with fixed or latest versions for each -> Key for this ecosystem since each component lives in an isolated repo
+- It automatically checks for version mismatchs (Example: Driver X uses hal-interface v1.1.0, Driver Y uses hal-interface v1.3.0, the tool will throw an error explicitly saying there's a version mismatch)
+- It allows to declare "custom" commands that can be mapped to "standard" CLI commands (build, flash, etc)
+- The tool has "runners", which allows for great flexibility. You can customize them, provide your own, etc.
+  
+The commands are implemented in the [`nexus-hal-interface`](https://github.com/Fo-Zi/nexus-hal-interface) repository - while this might seem odd at first, it makes sense because this is the common dependency shared across all projects in the ecosystem.
+Then, for any project based on this ecosystem you can do something like this:
 
 ```bash
 # Build any project in your workspace
