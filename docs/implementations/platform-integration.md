@@ -1,262 +1,123 @@
-# Architecture Overview
+# Platform Integration
+This document describes the platform integration process for the Nexus Embedded Ecosystem.
+Showcasing examples, tips, and best practices.
+In order to understand this document, it's recommended to have read:
+*architecture/overview*
+*architecture/core-principles*
 
-The Nexus Embedded Ecosystem is built around a simple idea: separate **what peripherals do** from **how they do it**. This document explains the architecture in detail.
+## What is the Platform Integration Layer
+Given how the Ecosystem and HAL are structured, the missing step to use the drivers and HAL implementations (or provide your own),
+is to define a layer that **defines the actual HW resources used**.
+This means:
+- Defining which: GPIOs, I2C buses, SPI port, etc; will your board/app use
+- The platform specific configuration and contexts:
+  - For example, if using esp-idf, you could include a mutex handle on each bus context.
+  -
+-
 
-## The Problem We're Solving
+## How I envisioned this Layer
+I envisioned this layer composed by at least two files:
+- Platform Integration Header
+- Platform Integration Source Files
 
-Traditional embedded development ties your code to specific platforms:
+### Platform Integration Header
+This layer header would:
+- Define logical definitions for resources.
+- Offer methods to:
+  - Initialize all the hardware resources
+  - Get references to resource contexts
+  - Some other methods that you want to be **public**
 
+Example:
 ```c
-// ESP32 project
-#include "driver/i2c.h"
-void read_sensor(void) {
-    uint8_t data[6];
-    i2c_master_write_read_device(I2C_NUM_0, 0x76, NULL, 0, data, 6, 1000);
-}
+// platform.h header
+// Logical resources defs ->
+typedef enum{
+    GPIO_FUNC_GREEN_LED_0,
+    GPIO_FUNC_RTC_INTERRUPT,
+    GPIO_FUNC_TOTAL_NUM
+}Gpio_Func;
 
-// STM32 project - completely different API
-#include "stm32f4xx_hal.h"
-void read_sensor(void) {
-    uint8_t data[6];
-    HAL_I2C_Master_Receive(&hi2c1, 0x76<<1, data, 6, 1000);
-}
+// Global init ->
+void platform_init(void);
+
+// Context getters ->
+nhal_gpio_ctx * platform_get_gpio_ctx(Gpio_Func func);
+
+// Other board-specific methods that you want to be public ->
+void set_secondary_power_source(bool on_off);
+
 ```
 
-Porting means rewriting drivers, learning new APIs, and often subtle bugs from copy-paste engineering.
-
-## The Solution: Contract-Based Architecture
-
-Instead of depending on platform-specific APIs, we define **contracts** that any platform can implement:
-
-```c
-// Same code works on ESP32, STM32, Nordic, etc.
-#include "nhal_i2c_master.h"
-void read_sensor(struct nhal_i2c_context *i2c) {
-    uint8_t data[6];
-    nhal_i2c_master_read(i2c, 0x76, data, 6, 1000);
-}
-```
-
-## Architecture Layers
-
-### Layer 1: Interface (Contract Definitions)
-
-**Repository**: `nexus-hal-interface`
-**Purpose**: Define what peripherals can do, not how they do it
-**Content**: Header-only C interfaces, no implementation code
+### Platform Integration Source Files
+This layer would:
+- "Map" the logical (abstract) resources to the actual Hardware
+- Link and/or define implementation specific data
+- Allocate the memory for the contexts and configurations
 
 ```c
-// nhal_i2c_master.h - Defines the contract
-nhal_result_t nhal_i2c_master_write(
-    struct nhal_i2c_context *i2c_ctx,
-    uint8_t dev_address,
-    const uint8_t *data,
-    size_t len,
-    nhal_timeout_ms timeout
-);
-```
+// platform.c file
+#include "platform.h"
 
-**Key characteristics**:
-- Platform-agnostic function signatures
-- Standardized error codes (`nhal_result_t`)
-- Context-based design (no global state)
-- Opaque implementation structures
+// Memory allocation of main resources ->
+static nhal_gpio_ctx gpio_ctxs[GPIO_FUNC_TOTAL_NUM];
+static nhal_gpio_config gpio_configs[GPIO_FUNC_TOTAL_NUM];
 
-### Layer 2: Implementation (Platform-Specific Code)
+// Memory allocation of platform specific resources ->
+static nhal_gpio_impl_ctx gpio_impl_ctxs[GPIO_FUNC_TOTAL_NUM];
+static nhal_gpio_impl_config gpio_impl_configs[GPIO_FUNC_TOTAL_NUM];
 
-**Repositories**: `nexus-hal-esp32`, `nexus-hal-stm32`, etc.
-**Purpose**: Fulfill the interface contracts for specific platforms
-**Content**: C source files that implement the interface functions
+// Link implementation specific data ->
+// ****** Intentionally left blank, approaches to do this in the next sections ******
 
-```c
-// nhal_i2c.c in nexus-hal-esp32
-nhal_result_t nhal_i2c_master_write(
-    struct nhal_i2c_context *i2c_ctx,
-    uint8_t dev_address,
-    const uint8_t *data,
-    size_t len,
-    nhal_timeout_ms timeout
-) {
-    // ESP-IDF specific implementation
-    esp_err_t result = i2c_master_write_to_device(
-        i2c_ctx->i2c_bus_id,
-        dev_address,
-        data, len,
-        pdMS_TO_TICKS(timeout)
-    );
-    return nhal_map_esp_err(result);
-}
-```
-
-**Implementation freedom**:
-- Thread safety approach (mutexes, interrupt disable, etc.)
-- Memory allocation patterns (static, dynamic, pools)
-- Performance optimizations (DMA, CPU copy, caching)
-- Error handling detail level
-- Resource management (power, clocks, pins)
-
-### Layer 3: Drivers (Device-Specific Logic)
-
-**Repositories**: `nexus-bme280`, `nexus-ds3231`, etc.
-**Purpose**: Control specific devices using only interface contracts
-**Content**: Device drivers that work on any compliant implementation
-
-```c
-// bme280.c - Works on any platform
-#include "nhal_i2c_master.h"  // ← Only interface dependency
-
-bme280_result_t bme280_read_temperature(bme280_handle_t *handle, float *temp) {
-    uint8_t reg_addr = BME280_REG_TEMP_MSB;
-    uint8_t data[3];
-
-    nhal_result_t result = nhal_i2c_master_write_read_reg(
-        handle->i2c_ctx,
-        BME280_I2C_ADDR,
-        &reg_addr, 1,
-        data, sizeof(data),
-        1000
-    );
-
-    if (result == NHAL_OK) {
-        // Process raw temperature data
-        int32_t raw_temp = (data[0] << 12) | (data[1] << 4) | (data[2] >> 4);
-        *temp = compensate_temperature(handle, raw_temp);
-        return BME280_OK;
+// Global hardware init ->
+void platform_init(){
+    // GPIOs init ->
+    for (int i = 0; i < GPIO_FUNC_TOTAL_NUM; i++){
+        nhal_gpio_init(&gpio_ctxs[i]);
+        nhal_gpio_set_config(&gpio_ctxs[i],&gpio_configs[i]);
     }
 
-    return BME280_ERR_I2C_ERROR;
+    // Other inits ->
+
 }
 ```
 
-### Layer 4: Platform Integration (Your Application Glue)
+## Different approaches to declare Implementation Specific Data
+As I mentioned before, now what's left to understand how to 'tie' everything together and
+have the full Platform Integration Layer is to link the implementation specific data.
+In order to do this, we can use different approaches. I propose some:
+- Approach 1: Single Source File - No macros
+- Approach 2: Single Source File - Helper Macros
+- Approach 3: Multiple Source Files
 
-**Not part of the ecosystem** - every project is different
-**Purpose**: Connect your specific hardware to the HAL implementation
-**Content**: Hardware configuration, context management, initialization
+### Single Source File - No macros
+As in the 'platform.c' file example, we can just declare all the structures in the same file, and then
+assign the nested pointers to the implementation specific data.
 
+We can for example define the 'generic data first':
 ```c
-// platform_config.c - Your project-specific code
-#include "nhal_esp32_helpers.h"
-
-// Define I2C bus for sensors with ESP32-specific configuration
-NHAL_ESP32_I2C_DEFINE(sensor_bus, I2C_NUM_0, GPIO_21, GPIO_22);
-
-void platform_init(void) {
-    // Get configured context
-    struct nhal_i2c_context *sensor_i2c = NHAL_ESP32_I2C_GET_CTX(sensor_bus);
-
-    // Initialize drivers with the context
-    bme280_init(&temperature_sensor, sensor_i2c, 1000);
-    ds3231_init(&rtc, sensor_i2c, 1000);
-}
+// platform.c file
+static nhal_gpio_config gpio_configs[GPIO_FUNC_TOTAL_NUM] = {
+    [GPIO_FUNC_GREEN_LED_0] = {
+        .mode = GPIO_MODE_OUTPUT,
+        .input_pull = GPIO_PULL_NONE,
+    },
+    // <- OTHER GPIOs
+};
 ```
-
-This layer handles:
-- Pin assignments and hardware routing
-- Clock configuration and power management
-- Context creation and lifecycle management
-- Platform-specific initialization sequences
-
-## Data Flow Example
-
-Here's how a temperature reading flows through the architecture:
-
-```
-1. Application calls: bme280_read_temperature(&sensor, &temp)
-                                    ↓
-2. BME280 driver calls: nhal_i2c_master_write_read_reg(ctx, ...)
-                                    ↓
-3. ESP32 implementation: i2c_master_write_read_device(bus, ...)
-                                    ↓
-4. ESP-IDF driver: Hardware I2C transaction
-                                    ↓
-5. Result bubbles back up through each layer
-```
-
-Each layer only knows about the layer directly below it. The BME280 driver has no idea it's running on ESP32 vs STM32.
-
-## Context-Based Design
-
-Instead of global peripheral instances (`I2C1`, `SPI0`), everything works with contexts:
-
+Then the implementation specific:
 ```c
-struct nhal_i2c_context {
-    nhal_i2c_bus_id i2c_bus_id;
-    nhal_i2c_operation_mode_t current_mode;
-    struct nhal_i2c_impl_ctx *impl_ctx;  // ← Implementation-specific state
-    // Conditional features based on compile-time flags
+// platform.c file
+static nhal_gpio_impl_config gpio_impl_configs[GPIO_FUNC_TOTAL_NUM] = {
+    [GPIO_FUNC_GREEN_LED_0] = {
+        .output_mode = GPIO_MODE_OUTPUT_OD ,
+        .alternate_mode = ,
+    },
+    // <- OTHER GPIOs
 };
 ```
 
-**Benefits**:
-- **Multiple instances**: Multiple I2C buses, same interface
-- **Testability**: Easy to inject mock contexts
-- **Thread safety**: Implementation can add mutexes to context
-- **State encapsulation**: No global variables, clear ownership
+### Single Source File - Helper Macros
 
-## Memory Model
-
-**You control application memory**:
-- All contexts are allocated by your application (stack, heap, static, pools)
-- All configuration structures are yours
-- All data buffers are yours
-
-**Implementation controls internal resources**:
-- May allocate mutexes, queues, DMA descriptors as documented
-- Internal state goes in opaque `impl_ctx` structures
-- Resource allocation strategy varies by implementation
-
-```c
-// Example: You decide allocation strategy
-struct nhal_i2c_context i2c_ctx;        // Stack allocation
-static struct nhal_i2c_context i2c_ctx; // Static allocation
-struct nhal_i2c_context *i2c_ctx = pool_alloc(); // Pool allocation
-
-// HAL initializes your memory, doesn't allocate new memory
-nhal_i2c_master_init(&i2c_ctx);
-```
-
-## Implementation Contracts
-
-Every implementation must:
-
-1. **Implement all interface functions** with documented behavior
-2. **Follow the state machine** (uninitialized → initialized → configured → operational)
-3. **Return appropriate error codes** mapped from platform errors
-4. **Handle context validation** (NULL checks, state validation)
-5. **Document allocation behavior** (what gets allocated when)
-6. **Document threading model** (thread-safe, not thread-safe, per-context safety)
-
-## Benefits of This Architecture
-
-**For Application Developers**:
-- Write once, run on any supported platform
-- Easy unit testing with mock implementations
-- Clear separation of concerns
-- No vendor lock-in
-
-**For Driver Writers**:
-- Single codebase for all platforms
-- Consistent interface across peripherals
-- Testable without hardware
-
-**For Platform Implementers**:
-- Freedom to optimize for platform strengths
-- Can focus on platform integration, not driver logic
-- Clear contracts to implement
-
-## Trade-offs
-
-**Advantages**:
-- True code portability
-- Excellent testability
-- Clean separation of concerns
-- Implementation flexibility
-
-**Disadvantages**:
-- Additional abstraction layer
-- May not expose all platform-specific features
-- Integration complexity for platform layer
-- Learning curve for the architecture
-
-The trade-off is essentially: slightly more complexity upfront for significantly easier long-term development and maintenance.
+### Multiple Source Files
