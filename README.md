@@ -7,22 +7,22 @@
 ## Contents
 - [🎯 What is it](#-what-is-it)
   - [Quick Simple Example](#quick-simple-example)
-- [💭 Motivation and Goals](#-motivation-and-goals)
-  - [🔍 Motivation](#-motivation)
-  - [🎯 Goals](#-goals)
-- [🏛️ Architecture](#️-architecture)
-- [⚠️ Challenges](#️-challenges)
-- [🛠️ Development Workflow & Tooling](#️-development-workflow--tooling)
+- [💭Motivation and Goals](#-motivation-and-goals)
+  - [🔍Motivation](#-motivation)
+  - [🎯Goals](#-goals)
+- [🏛️Architecture](#️-architecture)
+- [🛠️Development Workflow & Tooling](#️-development-workflow--tooling)
   - [Unified Build System](#unified-build-system)
-- [📚 Current Components](#-current-components)
-- [🚀 Roadmap](#-roadmap)
-  - [Phase 1: Foundation & Core Interface ✅](#phase-1-foundation--core-interface-completed)
-  - [Phase 2: Basic Drivers and HAL implementation 🏗️](#phase-2-basic-drivers-and-hal-implementation-in-progress)
-  - [Phase 3: More Drivers and Lower Level HAL Implementation 🗓️](#phase-3-more-drivers-and-a-lower-level-hal-implementation-planned)
-  - [Phase 4: Framework Adapter HAL Implementation 🗓️](#phase-4-framework-adapter-hal-implementation-planned)
-  - [Phase 5: Portable Project, Documentation and First stable release 🗓️](#phase-5-portable-project-documentation-and-first-stable-release-planned)
-  - [Optional Advanced Features 🔮](#optional-advanced-features-future)
-- [🔄 Last words](#-last-words)
+- [📚Current Components](#-current-components)
+- [🚀Roadmap](#-roadmap)
+  - [Phase 1: Foundation & Core Interface ✅](#phase-1-foundation-and-core-interface)
+  - [Phase 2: Basic Drivers and HAL implementation ✅](#phase-2-basic-drivers-and-hal-implementation)
+  - [Phase 3: More Drivers and Lower Level HAL Implementation 🏗️](#phase-3-more-drivers-and-a-lower-level-hal-implementation)
+  - [Phase 4: Framework Adapter HAL Implementation 🗓️](#phase-4-framework-adapter-hal-implementation)
+  - [Phase 5: Portable Project, Documentation and First stable release 🗓️](#phase-5-portable-project-documentation-and-first-stable-release)
+  - [Optional Advanced Features 🔮](#optional-advanced-features)
+- [⚠️Challenges](#-challenges)
+- [🔄Last words](#-last-words)
 
 ---
 
@@ -133,27 +133,6 @@ nexus-hal-esp32 / nexus-hal-stm32 ← Platform implementations
 
 ---
 
-## ⚠️ Challenges
-
-So far I have identified the following challenges, that I will be experimenting on different ways to address them:
-
-- **🛠️ This is not "an SDK"** - While the architecture offers some interesting advantages, it's far from "an SDK". This means that the development workflow depends for now heavily on what hal-implementation you are using. For example:
-  - If using `nexus-hal-esp32-idf`, you will have access to idf tooling, allowing you to flash and debug using Python-based scripting
-  - If using `nexus-hal-cmsis`, you will have to delve more into low level details to flash and debug your device, likely reusing some linker script and openocd config file.
-
-- **🖥️ IDE integration is manual**
-  - If you want to use a full IDE to develop Software through this ecosystem, you will not have an extension to install everything nor make your IDE recognize all dependencies.
-    I personally just instruct CMake to export the build commands in a JSON format to a location I know of, and then create a `.clangd` file indicating where it should find it. This works at least with VS code, Zed editor, and most Vim/Nvim setups. (You would still need to personalize your IDE interaction if you want to build/flash/debug using only GUI) → I will add a guide on how to do this later on
-
-- **⚖️ Design trade-offs** - There's a clear tension and trade-off relationship between some design choices:
-  - **Portability** vs **Easiness of use**
-  - **Easiness of adding support for new MCUs/HAL impl./etc** vs **Tooling complexity and abstraction**
-  - **Standardizing build/flash/debug ops among different hal implementations** vs **Freedom of customization**
-
-→ [Full challenges & potential solutions](docs/challenges.md) (🗓️ Planned)
-
----
-
 ## 🛠️ Development Workflow & Tooling
 
 While the ecosystem's modular architecture offers flexibility, I recognize that **unified tooling** is essential for productivity. To address the "this is not an SDK" challenge mentioned above, I've developed West extension commands that provide consistent build and flash operations across all ecosystem components.
@@ -195,6 +174,7 @@ This approach means you can work with STM32, ESP32, and other platforms using th
 | [`nexus-hal-interface`](https://github.com/Fo-Zi/nexus-hal-interface) | 📐 Core HAL API definitions | ✅ Active |
 | [`nexus-hal-esp32-idf`](https://github.com/Fo-Zi/nexus-hal-esp32) | ⚡ ESP32 IDF implementation | ✅ Active |
 | [`nexus-eeprom-24c32`](https://github.com/Fo-Zi/nexus-eeprom-24c32) | 🔩 EEPROM driver | ✅ Active |
+| [`nexus-dht11`](https://github.com/Fo-Zi/nexus-dht11) | 🔩 Sensor driver | ✅ Active |
 | [`nexus-ci`](https://github.com/Fo-Zi/nexus-ci) | 🐳 Docker Images for CI | ✅ Active |
 | [`environmental-monitor`](https://github.com/Fo-Zi/environmental-monitor) | 🎯 Project Application example | 🗓️ Planned |
 
@@ -206,7 +186,8 @@ More platforms and drivers will come as the architecture stabilizes.
 
 ## 🚀 Roadmap
 
-### Phase 1: Foundation & Core Interface ✅ *Completed*
+### Phase 1: Foundation and Core Interface
+✅ **Completed**
 
 **Goal**: Establish the core interfaces, and necessary scripts to get a buid going
 
@@ -225,7 +206,8 @@ More platforms and drivers will come as the architecture stabilizes.
   - CMake integration patterns
   - Versioning strategy
 
-### Phase 2: Basic Drivers and HAL implementation 🏗️ *In progress*
+### Phase 2: Basic Drivers and HAL implementation 
+✅ **Completed**
 
 **Goal**: Test the interface with basic drivers and a high level HAL wrapper implementation ; Analyze the weak points of the interface, and
 modify/iterate until reaching a comfortable while portable approach.
@@ -242,18 +224,19 @@ modify/iterate until reaching a comfortable while portable approach.
   - Implement basic unit-tests for it, to validate the driver and mocks of the interface
   - Analyze how comfortable is the `I2C interface` to use
 
-#### 2.3 DHT11 Driver 🏗️ *In progress*
-- [ ] **`nexus-dth11`**
+#### 2.3 DHT11 Driver
+- ✅ **`nexus-dth11`**
   - Implement the driver, depending exclusively on the `nexus-hal-interface`
   - Implement basic unit-tests for it, to validate the driver and mocks of the interface
   - Analyze how comfortable are the `pin` and `delay interfaces` to use
 
-### Phase 3: More Drivers and a Lower Level HAL Implementation 🗓️ *Planned*
+### Phase 3: More Drivers and a Lower Level HAL Implementation
+🏗️ **In progress**
 
 **Goal**: Test the interface with drivers that depend on other interfaces, as well as a Bare Metal HAL implementation ; Analyze how the HAL interface fits and interact with
 a low level implementation
 
-#### 3.1 Bare-Metal Implementation 🗓️ *Planned*
+#### 3.1 Bare-Metal Implementation 🏗️ **In progress**
 - [ ] **`nexus-hal-stm32f407vg`** (or similar popular MCU)
   - Register-level implementation (No external HALs, no framework)
   - Basic necessary complementary tooling to build/flash/debug:
@@ -268,7 +251,8 @@ a low level implementation
   - An implementation of `PWM interface` needs then to be developed
   - Then the driver can be tested both through software and hardware
 
-### Phase 4: Framework Adapter HAL Implementation 🗓️ *Planned*
+### Phase 4: Framework Adapter HAL Implementation 
+🗓️ **Planned**
 
 **Goal**: Support an MCU through CMSIS, and design a scalable approach to ease and facilitate adding support for new MCUs already supported in the framework
 
@@ -283,7 +267,8 @@ a low level implementation
   - An implementation of `ADC interface` needs then to be developed
   - Then the driver can be tested both through software and hardware
 
-### Phase 5: Portable Project, Documentation and First stable release 🗓️ *Planned*
+### Phase 5: Portable Project, Documentation and First stable release
+🗓️ **Planned**
 
 **Goal**: To create a project based on the Ecosystem, showing the Platform Integration Layer, SOLID principles, and
 how to build the project for different supported platforms ; To document the approach and patterns used ; To release the first
@@ -315,7 +300,10 @@ stable version of the HAL Interface!
       they don't break other components (CI will be in place for this)
 
 
-### Optional Advanced Features 🔮 *Future*
+### Optional Advanced Features
+🔮 **Future**
+**Goal**: There are some things I'd like to explore, which would complement or strengthen the ecosystem; Advanced drivers that likely depend on async interfaces ; Explore other interfaces that HALs usually don't bother on abstracting but make sense to do so ; With all 
+the learned lessons of implementing the interface in C, create a Modern C++ variant and compare results: How much template metaprogramming allows fine grain control while remaining generic, resulting binary sizes, runtime performance ,etc.
 
 #### Display Driver (ST7789 TFT) 🔮 *Future*
 - [ ] **`nexus-st7789`**
@@ -340,6 +328,35 @@ stable version of the HAL Interface!
   - The Platform Integration Layer could be implemented in a much cleaner way using this approach. Even
     with some code generation
 
+---
+
+## ⚠ Challenges
+So far I have identified the following challenges, that I will be experimenting on different ways to address them:
+
+- **🛠️ This is not "an SDK"** - While the architecture offers some interesting advantages, it's far from "an SDK". This means that the development workflow depends for now heavily on what hal-implementation you are using. For example:
+  - If using `nexus-hal-esp32-idf`, you will have access to idf tooling, allowing you to flash and debug using Python-based scripting
+  - If using `nexus-hal-cmsis`, you will have to delve more into low level details to flash and debug your device, likely reusing some linker script and openocd config file.
+- **🖥️ IDE integration is manual**
+  - If you want to use a full IDE to develop Software through this ecosystem, you will not have an extension to install everything nor make your IDE recognize all dependencies.
+    I personally just instruct CMake to export the build commands in a JSON format to a location I know of, and then create a `.clangd` file indicating where it should find it. I will add a guide on how to do this later on.
+- **⚖️ Design Tradeoffs**
+  - **Genericity** vs **Easeness of Implementation**:
+    - Some drivers require fine grain control over hardware capabilities, and there's a clear tension between exposing hardware details
+      and making the interfaces generic. For example:
+      - The DHT11 requires to set the same pin as input and output. The input requires either an internal or external pullup:
+        - If the interface allows to set the input pullup (available in most platforms, but not for all pins), the driver would work
+        just fine, and at initialization, a flag indicating if internal or external pullup should be used can be set.
+        - The problems arise in the details: What if by accident the driver gets assigned a pin that doesn't support this
+        and no external pullup is used? Yes, **the driver would fail silently**, probably by timeout.
+        - If the HAL would want to expose hardware capabilities, and then drivers evaluate if the implementation
+        supports the features it needs, then each HAL implementation would require a huge effort (Describing and exposing
+        hardware details at a per-peripheral basis)
+  - 
+
+
+→ [Full challenges & potential solutions](docs/challenges_and_solutions.md) (🗓️ Planned)
+
+---
 
 ## 🔄 Last words
 
