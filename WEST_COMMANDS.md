@@ -1,73 +1,108 @@
 # Nexus Ecosystem West Commands
 
-This document describes how to use the West extension commands provided by the Nexus Ecosystem and how to extend them with your own custom runners.
+Custom West commands for building, flashing, and managing multi-platform embedded projects. These commands abstract platform-specific build systems (ESP-IDF, CMake, Make) behind a unified interface.
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Available Commands](#available-commands)
+- [Platform Configuration (`platform_builds.yaml`)](#platform-configuration-platform_buildsyaml)
+- [Supported Build Systems](#supported-build-systems)
+- [Supported Flash Runners](#supported-flash-runners)
+- [Customizing West Commands](#customizing-west-commands)
+- [Common Workflows](#common-workflows)
+- [Integration with IDEs](#integration-with-ides)
+- [Troubleshooting](#troubleshooting)
+- [Best Practices](#best-practices)
+- [Extending the System](#extending-the-system)
 
 ## Overview
 
-The Nexus Ecosystem provides West extension commands that work across all projects in your workspace. These commands are automatically available when you import the `hal-interface` project in your West manifest.
+The ecosystem extends West with commands that handle multi-platform projects. Commands are automatically available when `hal-interface` is in your West manifest—they live there since it's the common dependency across all ecosystem projects.
 
 ## Available Commands
 
 ### `west build` - Build Projects
 
-Build one or more projects in your workspace with automatic project type detection.
-
-**Usage:**
-```bash
-# Build current directory project
-west build
-
-# Build specific project
-west build my-sensor-app
-west build my-project
-
-# Build all projects in workspace
-west build --all
-
-# Clean before building
-west build --clean
-
-# Verbose output
-west build -v
-```
-
-**Supported Project Types:**
-- **ESP-IDF**: Projects with `CMakeLists.txt` + `sdkconfig`
-- **CMake**: Projects with `CMakeLists.txt`
-- **Make**: Projects with `Makefile`
-
-### `west flash` - Flash Projects
-
-Flash built projects to target hardware using automatic runner detection.
+Build projects for specific platforms using `platform_builds.yaml` configuration.
 
 **Basic Usage:**
 ```bash
-# Flash current directory project
-west flash
+# Build for specific platform
+west build -b esp32
+west build -b stm32f103
 
-# Flash specific project
-west flash my-sensor-app
-west flash my-project
+# Verbose output
+west build -b esp32 -v
 
-# Flash specific binary/target
-west flash --target blinky
-west flash my-project --target firmware
-
-# Flash with specific runner
-west flash --runner openocd
-west flash --runner stflash
-west flash --runner makeflash
+# Clean before building
+west build -b stm32f103 --clean
 ```
 
-**Flash Options:**
+**How it works:**
+
+Projects define supported platforms in `platform_builds.yaml`:
+
+```yaml
+platforms:
+  esp32:
+    platform_build_path: ./platform-builds/esp32
+    build_system: esp-idf
+    description: "ESP32 with ESP-IDF"
+
+  stm32f103:
+    platform_build_path: ./platform-builds/stm32f103
+    build_system: cmake
+    description: "STM32F103 bare-metal"
+```
+
+When you run `west build -b esp32`:
+1. West reads `platform_builds.yaml`
+2. Finds the `esp32` platform configuration
+3. Navigates to `./platform-builds/esp32`
+4. Detects build system (ESP-IDF in this case)
+5. Runs the appropriate build commands
+
+**Supported Build Systems:**
+- **esp-idf**: ESP-IDF projects (uses `idf.py build`)
+- **cmake**: CMake projects (uses `cmake` + `make`)
+- **make**: Makefile projects (uses `make`)
+
+### `west flash` - Flash Projects
+
+Flash firmware to target hardware. Uses the last built platform automatically.
+
+**Basic Usage:**
 ```bash
-# ESP-IDF specific options
+# Flash the last built platform
+west flash
+
+# Flash with specific runner (optional)
+west flash --runner openocd
+west flash --runner stflash
+```
+
+**Platform-Specific Options:**
+```bash
+# ESP32: Specify serial port and baud rate
+west flash --port /dev/ttyUSB0
 west flash --port /dev/ttyUSB0 --baud 921600
 
-# List all flashable projects
-west flash --list
+# STM32: Usually just needs the runner
+west flash --runner openocd
+```
 
-# List available runners for current project
+**How it works:**
+
+After building with `west build -b esp32`, a `.last_build_platform` file tracks which platform was built. `west flash` reads this and flashes using the appropriate method:
+
+- **ESP32**: Uses `idf.py flash`
+- **STM32 (with OpenOCD)**: Uses OpenOCD runner
+- **Other platforms**: Falls back to available runners
+
+**Available Runners:**
+```bash
+# List runners for current project
 west flash --list-runners
 ```
 
@@ -86,32 +121,69 @@ west list-projects --json
 
 ### `west clean` - Clean Projects
 
-Remove build artifacts and intermediate files.
+Remove build artifacts from the last built platform.
 
 **Usage:**
 ```bash
-# Clean current directory project
+# Clean the last built platform
 west clean
-
-# Clean specific project
-west clean my-project
-
-# Clean all projects
-west clean --all
 ```
 
-## Flash Runners
+**How it works:**
 
-The flash system uses "runners" - specialized handlers for different flash tools and targets.
+Reads `.last_build_platform` and cleans the corresponding `platform_build_path` directory. For ESP-IDF projects, runs `idf.py fullclean`. For CMake/Make projects, removes the build directory.
 
-### Available Runners
+## Platform Configuration (`platform_builds.yaml`)
 
-| Runner | Description | Requirements |
-|--------|-------------|--------------|
-| `openocd` | OpenOCD for embedded targets | `openocd.cfg` file + built ELF files |
-| `stflash` | ST-Link tools | `st-flash` command + built ELF files |
-| `makeflash` | Makefile targets | `Makefile` with flash targets |
-| `espidf` | ESP-IDF projects | `idf.py` command + `sdkconfig` file |
+Multi-platform projects use `platform_builds.yaml` to define build configurations for different targets.
+
+**Structure:**
+
+```yaml
+platforms:
+  <platform-name>:
+    platform_build_path: <path-to-build-directory>
+    build_system: <esp-idf|cmake|make>
+    description: <human-readable-description>
+```
+
+**Example:**
+
+```yaml
+platforms:
+  esp32:
+    platform_build_path: ./platform-builds/esp32
+    build_system: esp-idf
+    description: "ESP32 development kit with ESP-IDF"
+
+  stm32f103:
+    platform_build_path: ./platform-builds/stm32f103
+    build_system: cmake
+    description: "STM32F103 Blue Pill bare metal build"
+```
+
+Each platform configuration specifies where its build files live and which build system to use. See the [showcase project](https://github.com/Fo-Zi/nexus-showcase-project) for a complete example.
+
+## Supported Build Systems
+
+The `west build` command automatically detects and uses the appropriate build system:
+
+| Build System | Detection | Build Command |
+|--------------|-----------|---------------|
+| **esp-idf** | `CMakeLists.txt` + `sdkconfig` | `idf.py build` |
+| **cmake** | `CMakeLists.txt` | `cmake --build build` |
+| **make** | `Makefile` | `make` |
+
+## Supported Flash Runners
+
+Flash runners are automatically detected based on your project configuration:
+
+| Runner | Auto-Detected When | Manual Override |
+|--------|-------------------|-----------------|
+| **openocd** | `openocd.cfg` exists + ELF files in build/ | `--runner openocd` |
+| **stflash** | `st-flash` installed + ELF files | `--runner stflash` |
+| **makeflash** | `Makefile` with flash targets | `--runner makeflash` |
+| **espidf** | ESP-IDF project (has `sdkconfig`) | Automatic |
 
 ### OpenOCD Runner
 
@@ -171,7 +243,7 @@ Delegates to your existing Makefile flash targets.
 # Default flash target
 flash: firmware
 
-# Specific targets (detected automatically)  
+# Specific targets (detected automatically)
 flash-firmware: build
     flashtool --write build/firmware.bin --address 0x8000000
 
@@ -185,201 +257,101 @@ west flash --runner makeflash                    # Uses 'flash' target
 west flash --runner makeflash --target firmware    # Uses 'flash-firmware' target
 ```
 
-## Adding Custom Flash Runners
+## Customizing West Commands
 
-You can extend the flash system by adding your own runners for new tools or targets.
+### Adding Custom Flash Runners
 
-### 1. Create a Runner Class
+Want to add support for new flash tools? The West commands live in `hal-interface/scripts/nexus_commands/`.
 
-Edit `hal-interface/scripts/nexus_commands/runners.py` and add your runner:
+**Basic steps:**
 
-```python
-class JLinkRunner(FlashRunner):
-    """J-Link flash runner for ARM targets"""
-    
-    def can_flash(self):
-        """Check if J-Link is available and project is compatible"""
-        try:
-            # Check if J-Link tools are installed
-            subprocess.run(['JLinkExe', '-?'], 
-                          capture_output=True, check=True)
-            
-            # Check for J-Link config or device support
-            return (self.build_dir.exists() and 
-                   (self.project_path / "jlink.cfg").exists())
-        except:
-            return False
-    
-    def get_available_binaries(self):
-        """Get list of flashable binaries"""
-        if not self.build_dir.exists():
-            return []
-        
-        binaries = []
-        for item in self.build_dir.iterdir():
-            if item.is_file() and item.suffix == '.hex':
-                binaries.append(item.name)
-        return binaries
-    
-    def flash(self, binary=None, device="ATSAM3X8E", **kwargs):
-        """Flash using J-Link"""
-        if binary is None:
-            available = self.get_available_binaries() 
-            if not available:
-                raise RuntimeError("No binaries found to flash")
-            binary = available[0]
-        
-        binary_path = self.build_dir / binary
-        if not binary_path.exists():
-            raise RuntimeError(f"Binary {binary} not found")
-        
-        # Create J-Link script
-        script_content = f"""
-device {device}
-si 1
-speed 4000
-loadfile {binary_path} 0x8000000
-r
-g
-qc
-"""
-        
-        script_path = self.project_path / "flash_script.jlink"
-        with open(script_path, 'w') as f:
-            f.write(script_content)
-        
-        print(f"Flashing {binary} using J-Link...")
-        
-        cmd = ['JLinkExe', '-commandfile', str(script_path)]
-        result = subprocess.run(cmd, cwd=self.project_path)
-        
-        # Clean up
-        script_path.unlink()
-        
-        return result.returncode == 0
-```
+1. Create a runner class in `runners.py` that inherits from `FlashRunner`
+2. Implement `can_flash()`, `flash()`, and `get_available_binaries()`
+3. Add your runner to the `FLASH_RUNNERS` list
+4. Test with `west flash --list-runners`
 
-### 2. Register Your Runner
+See the existing runners (`OpenOCDRunner`, `STFlashRunner`, etc.) as examples.
 
-Add your runner to the registry:
+### Modifying Build Behavior
 
-```python
-# At the bottom of runners.py
-FLASH_RUNNERS = [
-    JLinkRunner,      # Add your new runner
-    OpenOCDRunner,
-    STFlashRunner,
-    MakeFlashRunner,
-    ESPIDFRunner,
-]
-```
+Custom build logic can be added by modifying `build.py`. Each build system has its own build method (`_build_esp_idf_project()`, `_build_cmake_project()`, etc.).
 
-### 3. Test Your Runner
+### Learning More About West
+
+These commands are West extensions. For deep customization, see:
+
+- [Official West Documentation](https://docs.zephyrproject.org/latest/develop/west/index.html)
+- [West Extension Commands](https://docs.zephyrproject.org/latest/develop/west/extensions.html)
+- [Nexus hal-interface repository](https://github.com/Fo-Zi/nexus-hal-interface) - Source code for these commands
+
+## Common Workflows
+
+### Multi-Platform Project Workflow
+
+**Typical development cycle:**
 
 ```bash
-# List available runners (should show your new runner)
-west flash --list-runners
+# Build for ESP32
+west build -b esp32
 
-# Use your custom runner
-west flash --runner jlink
-west flash --runner jlink --target myapp.hex
+# Flash to ESP32 board
+west flash --port /dev/ttyUSB0
+
+# Switch to STM32
+west build -b stm32f103
+
+# Flash to STM32 (uses OpenOCD automatically)
+west flash
+
+# Clean STM32 build
+west clean
+
+# Back to ESP32
+west build -b esp32
+west flash
 ```
 
-## Project Configuration Examples
+### Using OpenOCD for STM32
 
-### STM32 Project with OpenOCD
+**Setup:** Add `openocd.cfg` to your platform build directory:
 
-**File Structure:**
 ```
-my-stm32-project/
-├── CMakeLists.txt
-├── openocd.cfg          # OpenOCD configuration
-├── src/
-│   └── main.c
-└── build/               # Built binaries (after west build)
-    ├── firmware.elf
-    └── bootloader.elf
-```
-
-**openocd.cfg:**
-```
-# Debug adapter
+# openocd.cfg
 source [find interface/stlink.cfg]
-
-# Target configuration  
 source [find target/stm32f1x.cfg]
-
-# Adapter speed
 adapter speed 1000
-
-# Reset configuration
-reset_config srst_only srst_pulls_trst
 ```
 
-**Usage:**
+**Build and flash:**
+
 ```bash
-west build my-stm32-project
-west flash my-stm32-project --runner openocd
-west flash my-stm32-project --target bootloader --runner openocd
+west build -b stm32f103
+west flash --runner openocd
 ```
 
-### ESP32 Project
+### ESP32 Serial Port Selection
 
-**File Structure:**
-```
-my-esp32-project/
-├── CMakeLists.txt
-├── sdkconfig            # ESP-IDF configuration
-├── main/
-│   ├── CMakeLists.txt
-│   └── main.c
-└── build/               # Built binaries (after west build)
-```
+**Find your port:**
 
-**Usage:**
 ```bash
-west build my-esp32-project
-west flash my-esp32-project --port /dev/ttyUSB0
-west flash my-esp32-project --port COM3 --baud 921600
+# Linux
+ls /dev/ttyUSB*
+ls /dev/ttyACM*
+
+# macOS
+ls /dev/cu.usbserial*
+
+# Windows
+# Check Device Manager or use
+mode
 ```
 
-### Mixed Project with Makefile
+**Flash with specific port:**
 
-**File Structure:**
-```
-my-custom-project/
-├── Makefile
-├── src/
-├── build/
-└── scripts/
-    └── flash.sh         # Custom flash script
-```
-
-**Makefile with flash targets:**
-```makefile
-.PHONY: flash flash-app flash-bootloader
-
-# Default flash target
-flash: flash-app
-
-# Application flash
-flash-app: build/app.elf
-	./scripts/flash.sh $< 0x8000000
-
-# Bootloader flash  
-flash-bootloader: build/bootloader.elf
-	./scripts/flash.sh $< 0x8000000
-
-# Custom tool flash
-flash-custom: build/app.hex
-	my-custom-tool --flash $< --verify
-```
-
-**Usage:**
 ```bash
-west build my-custom-project  
-west flash my-custom-project --runner makeflash
-west flash my-custom-project --runner makeflash --target bootloader
+west build -b esp32
+west flash --port /dev/ttyUSB0
+west flash --port /dev/ttyUSB0 --baud 921600
 ```
 
 ## Integration with IDEs
@@ -390,7 +362,7 @@ Add to your `.vscode/tasks.json`:
 
 ```json
 {
-    "version": "2.0.0", 
+    "version": "2.0.0",
     "tasks": [
         {
             "label": "West Build",
@@ -405,7 +377,7 @@ Add to your `.vscode/tasks.json`:
         },
         {
             "label": "West Flash",
-            "type": "shell", 
+            "type": "shell",
             "command": "west",
             "args": ["flash"],
             "group": "build",
@@ -432,73 +404,55 @@ alias wbf='west build && west flash'
 
 ## Troubleshooting
 
-### Command Not Found
+### Commands Not Found
 
-If West doesn't recognize the commands:
+West commands missing? Check:
 
-1. **Check manifest**: Ensure `hal-interface` has `west-commands: scripts/west-commands.yml`
-2. **Update projects**: Run `west update` to sync repositories  
-3. **Check workspace**: Make sure you're in a West workspace (has `.west/` directory)
+1. `hal-interface` is in your `west.yml` with `west-commands: scripts/west-commands.yml`
+2. Run `west update` to sync
+3. You're in a West workspace (has `.west/` directory)
 
-### Flash Failures
+### Flash Issues
 
-Common flash issues and solutions:
+| Problem | Fix |
+|---------|-----|
+| "No flash runners available" | Run `west build -b <platform>` first |
+| "OpenOCD config not found" | Add `openocd.cfg` to platform build directory |
+| "st-flash not found" | Install: `sudo apt install stlink-tools` |
+| "Permission denied" (Linux) | Add to dialout: `sudo usermod -a -G dialout $USER` then logout/login |
+| ESP32 port not found | Check `ls /dev/ttyUSB*` or try different USB port |
 
-| Issue | Solution |
-|-------|----------|
-| "No flash runners available" | Build project first with `west build` |
-| "OpenOCD config not found" | Add `openocd.cfg` to project root |
-| "st-flash not found" | Install ST-Link tools: `sudo apt install stlink-tools` |
-| "Binary not found" | Check build directory exists and contains binaries |
-| "Permission denied" | Add user to dialout group: `sudo usermod -a -G dialout $USER` |
-
-### Adding Debug Output
-
-For troubleshooting runners, add debug output:
+### Debug Output
 
 ```bash
-# Verbose West output
-west -v flash --runner openocd
+# Verbose mode
+west -v build -b esp32
+west -v flash
 
-# List what runners can see
+# Check available runners
 west flash --list-runners
 
-# See all projects West can detect
+# List all projects
 west list-projects
 ```
 
 ## Best Practices
 
-### Project Organization
+**Platform build configs**: Keep `openocd.cfg` and other flash configs in platform build directories (`platform-builds/*/`)
 
-- **Keep flash configs in project root**: `openocd.cfg`, `jlink.cfg`
-- **Use consistent build directories**: Always use `build/` 
-- **Document flash requirements**: Add README with hardware setup
-- **Version control configs**: Include flash configs in git
+**Version control**: Commit `platform_builds.yaml`, `.gitignore` build artifacts
 
-### Runner Development
+**Port permissions** (Linux): Add yourself to `dialout` group once: `sudo usermod -a -G dialout $USER`
 
-- **Test thoroughly**: Ensure `can_flash()` is accurate
-- **Handle errors gracefully**: Provide clear error messages
-- **Support options**: Accept common parameters like port, baud
-- **Clean up**: Remove temporary files after flashing
-- **Document usage**: Add help text and examples
+**Shell aliases**: Speed up development:
+```bash
+alias wb='west build'
+alias wf='west flash'
+alias wc='west clean'
+```
 
-### Workspace Setup
+## Extending the System
 
-- **One workspace per ecosystem**: Don't mix different hardware families
-- **Use consistent naming**: Project names should be descriptive
-- **Share configurations**: Put common configs in shared repositories
-- **Document dependencies**: List required tools in README
+Want to add custom runners or modify build behavior? The West commands live in `hal-interface/scripts/nexus_commands/`.
 
-## Contributing
-
-To contribute improvements to the West commands:
-
-1. **Fork the hal-interface repository**
-2. **Make your changes** in `scripts/nexus_commands/`
-3. **Test thoroughly** with different project types
-4. **Update documentation** in this file
-5. **Submit a pull request**
-
-For questions or support, please open an issue in the hal-interface repository.
+See the "Adding Custom Flash Runners" section above for examples. Pull requests welcome at the [hal-interface repository](https://github.com/Fo-Zi/nexus-hal-interface).

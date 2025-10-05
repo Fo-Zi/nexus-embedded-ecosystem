@@ -1,38 +1,48 @@
 # Nexus Embedded Ecosystem
 
-*Contract-based and modular Ecosystem for Embedded Development*
+*Contract-based and modular ecosystem for embedded development*
+
+A multi-platform embedded firmware architecture built to address vendor lock-in and driver portability. This project explores hardware abstraction patterns that enable writing firmware once and deploying across different MCU platforms (ESP32, STM32, etc.) without code changes.
+
+Started as an exploration of better abstraction patterns in embedded systems, it has evolved into a working ecosystem I use for my own projects. The architecture separates HAL interfaces from platform implementations, demonstrating practical approaches to modular firmware design.
+
+**Project components**: HAL interface definitions, platform implementations (ESP32 IDF, STM32 bare-metal), hardware-agnostic drivers, and unified build tooling using West.
+
+→ [Detailed motivation & design philosophy](docs/motivation.md)
 
 ---
 
 ## Contents
 - [🎯 What is it](#-what-is-it)
   - [Quick Simple Example](#quick-simple-example)
-- [💭Motivation and Goals](#-motivation-and-goals)
-  - [🔍Motivation](#-motivation)
-  - [🎯Goals](#-goals)
-- [🏛️Architecture](#️-architecture)
-- [🛠️Development Workflow & Tooling](#️-development-workflow--tooling)
+- [💭 Motivation and Goals](#-motivation-and-goals)
+  - [🔍 Motivation](#-motivation)
+  - [🎯 Goals](#-goals)
+- [🏛️ Architecture](#️-architecture)
+- [🛠️ Development Workflow & Tooling](#️-development-workflow--tooling)
   - [Unified Build System](#unified-build-system)
-- [📚Current Components](#-current-components)
-- [🚀Roadmap](#-roadmap)
-  - [Phase 1: Foundation & Core Interface ✅](#phase-1-foundation-and-core-interface)
-  - [Phase 2: Basic Drivers and HAL implementation ✅](#phase-2-basic-drivers-and-hal-implementation)
-  - [Phase 3: More Drivers and Lower Level HAL Implementation 🏗️](#phase-3-more-drivers-and-a-lower-level-hal-implementation)
-  - [Phase 4: Framework Adapter HAL Implementation 🗓️](#phase-4-framework-adapter-hal-implementation)
-  - [Phase 5: Portable Project, Documentation and First stable release 🗓️](#phase-5-portable-project-documentation-and-first-stable-release)
-  - [Optional Advanced Features 🔮](#optional-advanced-features)
-- [⚠️Challenges](#-challenges)
-- [🔄Last words](#-last-words)
+- [📚 Current Components](#-current-components)
+- [🚀 Roadmap](#-roadmap)
+  - [Phase 1: Foundation and Core Interface ✅](#phase-1-foundation-and-core-interface)
+  - [Phase 2: Basic Drivers and HAL Implementation ✅](#phase-2-basic-drivers-and-hal-implementation)
+  - [Phase 3: Bare-Metal HAL and Additional Drivers ✅](#phase-3-bare-metal-hal-and-additional-drivers)
+  - [Phase 4: Integration Project and Documentation ✅](#phase-4-integration-project-and-documentation)
+  - [Phase 5: Real-World Application & v1.0.0 Release 🗓️](#phase-5-real-world-application--v100-release)
+  - [Future Exploration 🔮](#future-exploration)
+- [⚠️ Challenges & Tradeoffs](#️-challenges--tradeoffs)
+- [🔄 Closing Thoughts](#-closing-thoughts)
 
 ---
 
 ## 🎯 What is it
-I call it "Ecosystem", because it started merely as a shim HAL but quickly mutated to be more than that.
-This project is composed by the following independent components:
-- **Hardware Interface** (`nexus-hal-interface`) → An isolated repo ; Only contains platform-independent interfaces ('the contracts')
-- **Platform Implementation** ( i.e.: `nexus-hal-esp32-idf`, `nexus-hal-cmsis`, etc ) → Isolated repos ; Each constitutes an implementation for the `nexus-hal-interface`
-- **Drivers** (i.e.: `nexus-eeprom-24c32`) → Drivers built on top of **the interface** ;
-- **Complementary tooling** (i.e.: `nexus-ci`) → Other components that ease the development workflow ;
+The ecosystem separates hardware abstraction into independent, composable components:
+
+- **HAL Interface** (`nexus-hal-interface`) - Platform-independent API definitions (the contracts)
+- **Platform Implementations** (`nexus-hal-esp32-idf`, `nexus-llhal-stm32f103`) - Concrete implementations for specific platforms
+- **Hardware Drivers** (`nexus-dht11`, `nexus-eeprom-24c32`) - Drivers built against the interface, not specific platforms
+- **Build Tooling** - Unified commands across different build systems and platforms
+
+This separation emerged from experimenting with different abstraction patterns—what started as a simple HAL shim evolved into a multi-repository architecture that balances flexibility with practical constraints.
 
 ### Quick Simple Example
 ```c
@@ -55,9 +65,9 @@ bme280_result_t bme280_read_temp(bme280_handle_t *sensor, float *temp) {
 }
 ```
 
-No platform #ifdefs, no vendor-specific APIs.
+No platform #ifdefs, no vendor-specific APIs. The driver is portable by design.
 
-→ [Complete working example](https://github.com/Fo-Zi/nexus-environmental-monitor) ((🗓️ Planned))
+→ [Complete showcase project](https://github.com/Fo-Zi/nexus-showcase-project) - Multi-platform firmware example
 
 ---
 
@@ -65,46 +75,38 @@ No platform #ifdefs, no vendor-specific APIs.
 
 ### 🔍 Motivation
 
-While working with Embedded Systems I have faced some pain-points:
+Working across different embedded platforms, I kept hitting the same issues:
 
-- **🧪 Vendor HALs and others are not usually designed with testability in mind**
-  - I have found myself writing shim layers of abstraction for peripherals in order to be able to unit-test some complex driver or component
-    (You can of course do it, but I found myself repeating this common step many times)
+**Testability**: Vendor HALs aren't designed for unit testing. I'd write abstraction shims for every project just to test drivers in isolation—a pattern I was repeating too often.
 
-- **🔌 Drivers were not designed around a common interface**
-  - If the driver uses something like dependency injection, for example for the hardware functionality it needs, you'd often find yourself having to duplicate a ton of code. Imagine having ten I2C devices, whose drivers all use dependency injection with different function signatures..
+**Driver portability**: Each I2C device driver expected different function signatures. Ten devices meant ten different integration patterns. There was no common contract.
 
-- **🔒 The HAL your code depends on, is tied to a specific Framework/MCU/SDK**
-  - This goes hand-by-hand with the first point
-  - The porting efforts become bigger → Your code and your drivers need some degree of refactoring
-  - Usually I have found also that HALs for RTOSes are radically different from HALs for Bare Metal. While this has of course good reasons to be like that, I often found that most drivers depend on the same functionality, what changes could be if you need to take a mutex before accessing a shared bus as a master or not (for example), or some other implementation specific detail.
+**Platform lock-in**: Switching from ESP-IDF to bare-metal STM32 meant rewriting not just peripheral code, but drivers too. RTOS-based HALs and bare-metal HALs looked completely different, even though most drivers need the same basic operations.
 
-- **🏗️ Some HALs are very complex and big**
-  - For some projects these HALs are an overkill, even if more generic than others
+**Unnecessary complexity**: Some HAL layers are heavyweight for simple use cases. I wanted something modular—use what you need, skip what you don't.
 
-All of these points and probably others that I am missing, pushed me to create this project and experiment with it.
+These problems became the design constraints for this project.
 
-→ [Detailed pain points & experiences](docs/motivation.md) (🗓️ Planned)
+→ [Detailed experiences & design rationale](docs/motivation.md)
 
 ---
 ### 🎯 Goals
 
-- **Provide platform-independent interfaces that drivers can depend on**
-  - Drivers only depend on the nexus-hal-interface, and are transparent to platform-details.
-- **Not to force a specific Implementation of the HAL interface**
-  - I will provide basic implementations for me to test the approach on a few platforms. You can use those, or
-    provide your own implementations with the focus you need (performance, memory footprint, power consumption, etc)
-  - This way, you can prototype using a common interface, and if you later need to optimize its implementation, you can.
-- **To design the contracts as 'allocation free'**
-  - The HAL implementation and consumer determine the allocation scheme. You may want to use a static or dynamic approach, that's up to you.
-- **To leave room for extension and implementation specific details**
-  - It's not possible to create config/context structures that are applicable **anywhere**, there is always some niche case that you haven't considered.
+**Platform-independent driver development**: Drivers depend on interface contracts, not platform specifics. Write a sensor driver once, use it across ESP32, STM32, or any platform with a HAL implementation.
+
+**Implementation flexibility**: The interface defines behavior, not implementation details. Platform implementations can optimize for RTOS vs bare-metal, performance vs memory, or specific hardware features—whatever fits the target constraints.
+
+**Allocation agnostic**: No forced allocation patterns. Implementations and applications choose static or dynamic allocation based on their needs.
+
+**Extensibility**: Leave room for platform-specific features through implementation config structures. Not every platform supports every feature, and the interface acknowledges that.
+
+These goals guide the design, though the specifics continue to evolve based on what works in practice.
 
 ---
 
 ## 🏛️ Architecture
 
-The ecosystem separates the **what** from the **how**:
+The architecture evolved through iteration, settling on a structure that separates contracts from implementations:
 
 ```
 Your Application
@@ -116,90 +118,89 @@ nexus-hal-interface ← Contract definitions (header-only)
 nexus-hal-esp32 / nexus-hal-stm32 ← Platform implementations
 ```
 
-**Key principles**:
-- **Contract-based**: Drivers depend on interface contracts, not implementations
-- **Implementation freedom**:
-  - The interface doesn't force allocation patterns. Implementations can use mutexes, static locks, interrupt disabling, or pools - whatever fits their platform and your needs.
-  - Each platform can optimize for its needs (RTOS vs bare metal, performance vs size, etc.)
-- **Context ownership**: You own and manage all contexts and configuration structures - HAL **initializes** your memory, doesn't allocate it for you
+**Design principles**:
 
-**Platform Integration Layer**:
-- This is your hardware-specific glue code - pin assignments, clock configs, etc.
-- Not part of the Ecosystem, since it cannot be defined generically. But examples and templates will be provided that help to
-  isolate: platform-specific vs platform-agnostic (🗓️ Planned)
+**Contract-based dependencies**: Drivers and application code depend on interface contracts, not concrete implementations. This inverts the typical dependency direction—platforms implement interfaces rather than applications depending on platform APIs.
 
-→ [Detailed architecture & design decisions](docs/architecture.md) (🗓️ Planned)
-→ [Core principles & contracts](docs/core-principles.md) (🗓️ Planned)
+**Implementation freedom**: The interface defines behavior, not mechanisms. Implementations choose their own synchronization primitives (mutexes, critical sections, lock-free), memory strategies, and optimizations based on platform constraints.
+
+**Explicit ownership**: Applications allocate and own all context structures. The HAL initializes memory you provide—no hidden allocations, no lifecycle ambiguity.
+
+**Platform integration**: Hardware-specific code (pin mappings, clock configuration, startup) lives in a platform layer outside the ecosystem. The [showcase project](https://github.com/Fo-Zi/nexus-showcase-project) demonstrates this pattern.
+
+This structure emerged from trying several approaches—monolithic HALs, plugin systems, compile-time polymorphism—and finding what balanced flexibility with practical constraints.
+
+→ [Architecture deep-dive & design decisions](docs/architecture.md)
+→ [Interface design patterns](docs/core-principles.md)
 
 ---
 
 ## 🛠️ Development Workflow & Tooling
 
-Since there's a core HAL interface that allows flexibility to have different HAL implementations for different MCUs/Frameworks/etc, it would be ideal to offer "standard" command to:
-- Build
-- Flash
-- Pull dependencies
+A multi-repository architecture needs consistent tooling across different platforms and build systems. The ecosystem should provide unified commands for building, flashing, and managing dependencies regardless of whether you're working with ESP-IDF, bare-metal CMake, or other build systems.
 
 ### Unified Build System
 
-To achieve the previous goals, I've decided to use: [West](https://docs.zephyrproject.org/latest/west/index.html) , the tool Zephyr uses as a core tool for their RTOS. I believe it's the ideal tool for this since:
-- It allows you to declare dependency manifests, with fixed or latest versions for each -> Key for this ecosystem since each component lives in an isolated repo
-- It automatically checks for version mismatchs (Example: Driver X uses hal-interface v1.1.0, Driver Y uses hal-interface v1.3.0, the tool will throw an error explicitly saying there's a version mismatch)
-- It allows to declare "custom" commands that can be mapped to "standard" CLI commands (build, flash, etc)
-- The tool has "runners", which allows for great flexibility. You can customize them, provide your own, etc.
-  
-The commands are implemented in the [`nexus-hal-interface`](https://github.com/Fo-Zi/nexus-hal-interface) repository - while this might seem odd at first, it makes sense because this is the common dependency shared across all projects in the ecosystem.
-Then, for any project based on this ecosystem you can do something like this:
+After evaluating options (Git submodules, CMake FetchContent, Bazel), I chose [West](https://docs.zephyrproject.org/latest/west/index.html)—Zephyr's meta-tool—because it handles multi-repo versioning, detects version conflicts automatically, supports custom commands, and provides extensible flash runners.
+
+The custom commands live in [`nexus-hal-interface`](https://github.com/Fo-Zi/nexus-hal-interface)—the common dependency across all ecosystem projects. This centralizes tooling while keeping individual components independent.
+
+**Example workflow**:
 
 ```bash
-# Build any project in your workspace
-west build my-sensor-driver
-west build stm32-firmware
+# Build for specific platform
+west build -b esp32
+west build -b stm32f103
 
-# Flash to target with automatic tool detection
-west flash --runner openocd    # For projects with OpenOCD configs
-west flash --runner stflash    # For STM32 with ST-Link
-west flash --runner espidf     # For ESP32 projects
+# Flash to device
+west flash
+
+# Clean build artifacts
+west clean
 
 # List all available projects
 west list-projects
 ```
 
-**What this gives you:**
+**What this provides:**
 - **Automatic project detection** - Supports ESP-IDF, CMake, and Make projects
-- **Extensible flash runners** - OpenOCD, ST-Link, Make targets, ESP-IDF tools
-- **Custom runner support** - Add your own flash tools and configurations
-- **Cross-platform consistency** - Same commands work across different target platforms
+- **Extensible flash runners** - OpenOCD, ST-Link, ESP-IDF tools, custom runners
+- **Cross-platform consistency** - Same commands across STM32, ESP32, and other targets
+- **Dependency version enforcement** - Catches incompatible dependency versions early
 
-This approach means you can work with STM32, ESP32, and other platforms using the same commands, while each platform retains its specific optimizations and tooling under the hood.
+The tooling abstracts platform differences while preserving access to platform-specific optimizations when needed.
 
-→ **[Complete West Commands Documentation](WEST_COMMANDS.md)** - Comprehensive guide with examples, runner configuration, and extending the system
+→ **[Complete West Commands Documentation](WEST_COMMANDS.md)** - Detailed guide with examples and extension patterns
 
 ---
 
 ## 📚 Current Components
 
-| Repository | Purpose | Status |
-|------------|---------|---------|
-| [`nexus-hal-interface`](https://github.com/Fo-Zi/nexus-hal-interface) | 📐 Core HAL API definitions | ✅ Active |
-| [`nexus-hal-esp32-idf`](https://github.com/Fo-Zi/nexus-hal-esp32) | ⚡ ESP32 IDF implementation | ✅ Active |
-| [`nexus-eeprom-24c32`](https://github.com/Fo-Zi/nexus-eeprom-24c32) | 🔩 EEPROM driver | ✅ Active |
-| [`nexus-dht11`](https://github.com/Fo-Zi/nexus-dht11) | 🔩 Sensor driver | ✅ Active |
-| [`nexus-ci`](https://github.com/Fo-Zi/nexus-ci) | 🐳 Docker Images for CI | ✅ Active |
-| [`environmental-monitor`](https://github.com/Fo-Zi/environmental-monitor) | 🎯 Project Application example | 🗓️ Planned |
+Components built so far, each exploring different aspects of the architecture:
 
-More platforms and drivers will come as the architecture stabilizes.
+| Repository | Purpose | Status | Notes |
+|------------|---------|---------|-------|
+| [`nexus-hal-interface`](https://github.com/Fo-Zi/nexus-hal-interface) | 📐 Core HAL API definitions | ✅ Active | Learned API design patterns |
+| [`nexus-hal-esp32-idf`](https://github.com/Fo-Zi/nexus-hal-esp32) | ⚡ ESP32 IDF implementation | ✅ Active | Framework wrapper experience |
+| [`nexus-llhal-stm32f103`](https://github.com/Fo-Zi/nexus-llhal-stm32f103) | 🔧 STM32 bare-metal HAL | ✅ Active | Register-level programming |
+| [`nexus-dht11`](https://github.com/Fo-Zi/nexus-dht11) | 🌡️ DHT11 sensor driver | ✅ Active | Pin & timing interface testing |
+| [`nexus-rtc-ds3231`](https://github.com/Fo-Zi/nexus-rtc-ds3231) | ⏰ DS3231 RTC driver | ✅ Active | I2C master interface validation |
+| [`nexus-eeprom-24c32`](https://github.com/Fo-Zi/nexus-eeprom-24c32) | 💾 EEPROM driver | ✅ Active | I2C transfer interface validation |
+| [`nexus-showcase-project`](https://github.com/Fo-Zi/nexus-showcase-project) | 🎯 Multi-platform example | ✅ Active | Complete integration demo |
+| [`nexus-ci`](https://github.com/Fo-Zi/nexus-ci) | 🐳 CI Docker images | ✅ Active | Build automation tooling |
 
-→ [Component compatibility matrix](docs/ecosystem-registry.md) (🗓️ Planned)
+Each component taught something different about the ecosystem—ESP32 implementation about framework integration, STM32 bare-metal about low-level control, drivers about interface usability.
 
 ---
 
 ## 🚀 Roadmap
 
+This roadmap reflects the development path—starting with foundational patterns and progressively tackling more complex integration challenges:
+
 ### Phase 1: Foundation and Core Interface
 ✅ **Completed**
 
-**Goal**: Establish the core interfaces, and necessary scripts to get a buid going
+**Goal**: Establish core interface patterns and build infrastructure
 
 #### 1.1 Core HAL Interface
 - ✅ **`nexus-hal-interface`**
@@ -216,11 +217,10 @@ More platforms and drivers will come as the architecture stabilizes.
   - CMake integration patterns
   - Versioning strategy
 
-### Phase 2: Basic Drivers and HAL implementation 
+### Phase 2: Basic Drivers and HAL Implementation
 ✅ **Completed**
 
-**Goal**: Test the interface with basic drivers and a high level HAL wrapper implementation ; Analyze the weak points of the interface, and
-modify/iterate until reaching a comfortable while portable approach.
+**Goal**: Validate the interface with real drivers and a framework wrapper HAL implementation. Iterate based on practical usage friction.
 
 #### 2.1 High-Level Framework Wrapper
 - ✅ **`nexus-hal-esp32-idf`**
@@ -228,148 +228,124 @@ modify/iterate until reaching a comfortable while portable approach.
   - Maintains ESP-IDF ecosystem compatibility
   - Complete tooling integration (idf.py build/flash/monitor)
 
-#### 2.2 I2C EEPROM Driver (eeprom-24c32)
+#### 2.3 I2C EEPROM Driver (eeprom-24c32)
 - ✅ **`nexus-eeprom-24c32`**
   - Implement the driver, depending exclusively on the `nexus-hal-interface`
   - Implement basic unit-tests for it, to validate the driver and mocks of the interface
-  - Analyze how comfortable is the `I2C interface` to use
+  - Analyze how comfortable is the `I2C transfer interface` to use
 
-#### 2.3 DHT11 Driver
-- ✅ **`nexus-dth11`**
+#### 2.4 DHT11 Driver
+- ✅ **`nexus-dht11`**
   - Implement the driver, depending exclusively on the `nexus-hal-interface`
   - Implement basic unit-tests for it, to validate the driver and mocks of the interface
   - Analyze how comfortable are the `pin` and `delay interfaces` to use
 
-### Phase 3: More Drivers and a Lower Level HAL Implementation
-🏗️ **In progress**
+### Phase 3: Bare-Metal HAL and Additional Drivers
+✅ **Completed**
 
-**Goal**: Test the interface with drivers that depend on other interfaces, as well as a Bare Metal HAL implementation ; Analyze how the HAL interface fits and interact with
-a low level implementation
+**Goal**: Implement a register-level HAL without framework dependencies. Explore how the interface patterns work with bare-metal constraints.
 
-#### 3.1 Bare-Metal Implementation 🏗️ **In progress**
-- [ ] **`nexus-hal-stm32f407vg`** (or similar popular MCU)
-  - Register-level implementation (No external HALs, no framework)
-  - Basic necessary complementary tooling to build/flash/debug:
-    - Linker scripts
-    - OpenOCD configuration
-    - Startup code
-    - CMake integration with flash/debug targets
+#### 3.1 Bare-Metal Implementation
+- ✅ **`nexus-llhal-stm32f103`**
+  - Register-level implementation (no vendor HAL, no framework)
+  - Complete bare-metal tooling:
+    - Linker scripts and startup code
+    - OpenOCD flash/debug configuration
+    - CMake build integration
 
-#### 3.2 Passive Buzz (PWM) Driver 🗓️ *Planned*
-- [ ] **`nexus-006ky`**
-  - This will depend on `PWM interface`, which will need to be implemented on `nexus-hal-interface`
-  - An implementation of `PWM interface` needs then to be developed
-  - Then the driver can be tested both through software and hardware
-
-### Phase 4: Framework Adapter HAL Implementation 
-🗓️ **Planned**
-
-**Goal**: Support an MCU through CMSIS, and design a scalable approach to ease and facilitate adding support for new MCUs already supported in the framework
-
-#### 4.1 CMSIS Framework Adapter
-- [ ] **`nexus-hal-cmsis-core`**
-  - Support at least one MCU through [CMSIS core](https://arm-software.github.io/CMSIS_5/Core/html/index.html)
-  - Create a template system to facilitate adding support for new MCUs
-
-#### 4.2 Photoresistor (ADC) Driver 🗓️ *Planned*
-- [ ] **`nexus-018ky`**
-  - This will depend on `ADC interface`, which will need to be implemented on `nexus-hal-interface`
-  - An implementation of `ADC interface` needs then to be developed
-  - Then the driver can be tested both through software and hardware
-
-### Phase 5: Portable Project, Documentation and First stable release
-🗓️ **Planned**
-
-**Goal**: To create a project based on the Ecosystem, showing the Platform Integration Layer, SOLID principles, and
-how to build the project for different supported platforms ; To document the approach and patterns used ; To release the first
-stable version of the HAL Interface!
-
-#### 5.1 Showcase Project 🗓️ *Planned*
-- [ ] **`nexus-showcase-project`**
-  - A project that showcases how the Ecosystem was envisioned
-  - To provide easy-to-use commands to compile and change the target platform
-  - To apply SOLID principles throughout the project, and how they fit with the ecosystem
-  - To use a modern approach, with CI,automated testing,automated doc, etc
-
-#### 5.2 Documentation 🏗️ *In progress*
-- [ ] **`nexus-embedded-ecosystem`**
-  - General Documentation:
-      - Architecture
-      - Design decisions and tradeoffs
-      - Basic Guides
-  - To document the Showcase Project and Patterns used
-
-#### 5.3 🚀 First Stable Version Release v1.0.0 🗓️ *Planned*
-- [ ] **`nexus-hal-interface` v1.0.0**
-  - At this point, there should be enough experimentation to be
-    able to release the first stable version.
-  - Does it mean that the interface will not evolve since this point?
-    No. It means:
-    - Core interfaces have been tested and will likely not be modified.
-    - Advanced or more specific interfaces can be designed and added, as long as
-      they don't break other components (CI will be in place for this)
-
-
-### Optional Advanced Features
-🔮 **Future**
-**Goal**: There are some things I'd like to explore, which would complement or strengthen the ecosystem; Advanced drivers that likely depend on async interfaces ; Explore other interfaces that HALs usually don't bother on abstracting but make sense to do so ; With all 
-the learned lessons of implementing the interface in C, create a Modern C++ variant and compare results: How much template metaprogramming allows fine grain control while remaining generic, resulting binary sizes, runtime performance ,etc.
-
-#### Display Driver (ST7789 TFT) 🔮 *Future*
-- [ ] **`nexus-st7789`**
+#### 3.2 DS3231 RTC Driver
+- ✅ **`nexus-rtc-ds3231`**
   - Implement the driver, depending exclusively on the `nexus-hal-interface`
   - Implement basic unit-tests for it, to validate the driver and mocks of the interface
-  - Analyze how comfortable is the `SPI interface` to use
+  - Analyze how comfortable is the `I2C master interface` to use
 
-#### Power Management Interface 🔮 *Future*
-- [ ] **`nexus-hal-interface`**
-  - Power management is usually HIGHLY dependant on the platform, but in practice, usually not more
-    than 3-4 power modes are used (Like for example: normal, light-sleep, deep-sleep, stand-by ).
-  - An interesting idea would be to abstract these modes, and to provide some way for the
-    Platform Integration Layer to decide on "the how" (i.e. what set of peripherals,clocks, and interrupts are
-    enabled/disabled for each)
+#### 3.3 SPI Interface Validation
+- ✅ **MCU-to-MCU SPI Communication**
+  - Validated SPI master interface through direct MCU communication
+  - Tested data transfer protocols between ESP32 and STM32
+  - Note: Initial plan for display driver (ST7789) was not completed due to hardware failure
 
-#### Modern C++ Approach 🔮 *Future*
-- [ ] **`nexus-hal-interface-cpp`,`nexus-hal-***-cpp`**
-  - To create a pure modern C++ interface version of the NHAL. Using features like: Namespaces ,Templates,
-    template specialization, concepts, constexpr, variants, optionals, etc.
-  - Compile-time code generation and metaprogramming would be a great fit for frameworks that
-    need to be generic/well abstracted, while not losing efficiency in the process.
-  - The Platform Integration Layer could be implemented in a much cleaner way using this approach. Even
-    with some code generation
+### Phase 4: Integration Project and Documentation
+✅ **Completed**
+
+**Goal**: Demonstrate the complete ecosystem with a multi-platform project. Document architecture patterns and design decisions.
+
+#### 4.1 Showcase Project
+- ✅ **`nexus-showcase-project`**
+  - Multi-platform firmware (ESP32 + STM32) with shared application code
+  - Platform abstraction layer demonstrating logical-to-physical resource mapping
+  - Unified build commands across different platforms
+  - Complete example of the ecosystem in action
+
+#### 4.2 Documentation
+- ✅ **`nexus-embedded-ecosystem`**
+  - Core architecture and motivation documented
+  - Design decisions and tradeoffs analysis
+  - Showcase project documentation complete
+  - Integration patterns demonstrated
+
+### Phase 5: Real-World Application & v1.0.0 Release
+🗓️ **Planned**
+
+**Goal**: Validate the ecosystem with a production-grade application. Demonstrate practical abstraction boundaries and finalize v1.0.0 release.
+
+#### 5.1 Vibration Analyzer Project
+- 🗓️ **Complex Real-World Application**
+  - DSP-based vibration analysis system
+  - Performance-critical data paths with DMA
+  - Hybrid approach: Use NHAL for standard peripherals (I2C sensors, GPIO), platform HAL directly for DMA/DSP
+  - Demonstrates when to abstract vs. when to use platform-specific optimizations
+  - Proves ecosystem viability beyond demonstration projects
+
+#### 5.2 First Stable Release
+- 🗓️ **`nexus-hal-interface` v1.0.0**
+  - Released after real-world validation in vibration analyzer
+  - Signifies:
+    - Core interfaces tested across multiple platforms and use cases
+    - Production-validated in performance-critical application
+    - Breaking changes unlikely for foundational APIs
+    - Additional interfaces can be added without breaking existing components
+
+
+### Future Exploration
+🔮 **Potential Directions**
+
+Areas I'd like to explore if time permits — more advanced abstraction patterns, interface extensions, and alternative implementation approaches.
+
+**Display drivers** (ST7789 TFT) - Test SPI interface with more complex peripherals
+
+**Power management interface** - Explore abstracting sleep modes while leaving platform-specific details to implementations
+
+**Modern C++ variant** - Experiment with template metaprogramming, concepts, and compile-time optimizations to compare against the C implementation
 
 ---
 
-## ⚠ Challenges
-So far I have identified the following challenges, that I will be experimenting on different ways to address them:
+## ⚠️ Challenges & Tradeoffs
 
-- **🛠️ This is not "an SDK"** - While the architecture offers some interesting advantages, it's far from "an SDK". This means that the development workflow depends for now heavily on what hal-implementation you are using. For example:
-  - If using `nexus-hal-esp32-idf`, you will have access to idf tooling, allowing you to flash and debug using Python-based scripting
-  - If using `nexus-hal-cmsis`, you will have to delve more into low level details to flash and debug your device, likely reusing some linker script and openocd config file.
-- **🖥️ IDE integration is manual**
-  - If you want to use a full IDE to develop Software through this ecosystem, you will not have an extension to install everything nor make your IDE recognize all dependencies.
-    I personally just instruct CMake to export the build commands in a JSON format to a location I know of, and then create a `.clangd` file indicating where it should find it. I will add a guide on how to do this later on.
-- **⚖️ Design Tradeoffs**
-  - **Genericity** vs **Easeness of Implementation**:
-    - Some drivers require fine grain control over hardware capabilities, and there's a clear tension between exposing hardware details
-      and making the interfaces generic. For example:
-      - The DHT11 requires to set the same pin as input and output. The input requires either an internal or external pullup:
-        - If the interface allows to set the input pullup (available in most platforms, but not for all pins), the driver would work
-        just fine, and at initialization, a flag indicating if internal or external pullup should be used can be set.
-        - The problems arise in the details: What if by accident the driver gets assigned a pin that doesn't support this
-        and no external pullup is used? Yes, **the driver would fail silently**, probably by timeout.
-        - If the HAL would want to expose hardware capabilities, and then drivers evaluate if the implementation
-        supports the features it needs, then each HAL implementation would require a huge effort (Describing and exposing
-        hardware details at a per-peripheral basis)
-  - 
+Building this ecosystem surfaced several practical challenges and design tradeoffs:
 
+**Not a complete SDK**: This is an abstraction layer, not a full SDK. Development workflows still depend on the underlying platform—ESP-IDF projects use `idf.py` tooling, bare-metal STM32 needs OpenOCD and linker scripts. West unifies commands where possible, but platform-specific details remain.
 
-→ [Full challenges & potential solutions](docs/challenges_and_solutions.md) (🗓️ Planned)
+**IDE integration**: No plug-and-play IDE extensions. I use `compile_commands.json` with clangd for code completion—manual but functional. A guide for this setup is planned.
+
+**Genericity vs. implementation complexity**: The core tension. Example: DHT11 needs a pin configured as both input and output with pull-up support. If the interface exposes pull-up configuration, the driver works—but only if the implementation supports it. Silent failures happen when a pin doesn't support the required feature. The alternative (exposing full hardware capabilities) makes implementations complex.
+
+Current approach: Keep interfaces minimal and let platform integration layers handle hardware-specific validation. Not perfect, but pragmatic.
+
+**Abstraction overhead**: Every abstraction adds a layer of indirection. For performance-critical code, implementations can bypass the interface and use platform APIs directly. The ecosystem doesn't forbid mixing abstraction levels—use what fits the constraint.
+
+These tradeoffs are inherent to hardware abstraction. The goal is finding a balance that works for most use cases while acknowledging the edge cases.
+
+→ [Detailed tradeoff analysis](docs/challenges_and_solutions.md)
 
 ---
 
-## 🔄 Last words
+## 🔄 Closing Thoughts
 
-This is a work in progress. The interfaces will change, and I'll probably discover better approaches as I build more drivers and support more platforms. But that's the point - to experiment and learn what actually works in practice.
+This project represents my exploration of embedded systems architecture—how to build firmware that's portable without sacrificing control, modular without adding excessive complexity.
 
-I will iterate until I find something that feels comfortable to work with, until that point, versioning will move fast. And once I get a stable enough API, I will release the first stable v1.0.0
+Each component taught me something: ESP-IDF implementation about framework integration patterns, bare-metal STM32 about register-level programming, drivers about API usability, and the showcase project about bringing it all together into a cohesive system.
+
+The ecosystem is functional and I use it for my own projects, but it's still evolving. Interfaces will continue to change as I discover better patterns. That's deliberate—I'm iterating toward something that works well in practice, not rushing to a v1.0.0 before the design is validated.
+
+This work demonstrates my approach to systems design: identify real problems, experiment with solutions, make informed tradeoffs, and iterate based on what works. It's as much about the process as the result.
