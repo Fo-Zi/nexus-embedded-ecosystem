@@ -27,7 +27,7 @@ Started as an exploration of better abstraction patterns in embedded systems, it
   - [Phase 2: Basic Drivers and HAL Implementation ✅](#phase-2-basic-drivers-and-hal-implementation)
   - [Phase 3: Bare-Metal HAL and Additional Drivers ✅](#phase-3-bare-metal-hal-and-additional-drivers)
   - [Phase 4: Integration Project and Documentation ✅](#phase-4-integration-project-and-documentation)
-  - [Phase 5: Real-World Application & v1.0.0 Release 🗓️](#phase-5-real-world-application--v100-release)
+  - [Phase 5: Complex Real-World Application & v1.0.0 Release 🗓️](#phase-5-complex-real-world-application--v100-release)
   - [Future Exploration 🔮](#future-exploration)
 - [⚠️ Challenges & Tradeoffs](#️-challenges--tradeoffs)
 - [🔄 Closing Thoughts](#-closing-thoughts)
@@ -288,7 +288,7 @@ This roadmap reflects the development path—starting with foundational patterns
   - Showcase project documentation complete
   - Integration patterns demonstrated
 
-### Phase 5: Real-World Application & v1.0.0 Release
+### Phase 5: Complex Real-World Application & v1.0.0 Release
 🗓️ **Planned**
 
 **Goal**: Validate the ecosystem with a production-grade application. Demonstrate practical abstraction boundaries and finalize v1.0.0 release.
