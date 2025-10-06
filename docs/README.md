@@ -7,21 +7,18 @@ This directory contains comprehensive documentation for understanding, using, an
 ### 🎯 Understanding the Ecosystem
 
 **Start Here:**
-- **[index.md](index.md)** - Main documentation landing page with navigation guide
-- **[motivation.md](motivation.md)** - Why this ecosystem exists and quick problem summary
+- **[motivation.md](motivation.md)** - Why this ecosystem exists and problem summary
 
 **Core Concepts:**
 - **[architecture/overview.md](architecture/overview.md)** - Complete architectural design and data flow
-- **[architecture/core-principles.md](architecture/core-principles.md)** - Design philosophy and fundamental contracts  
-- **[architecture/pain-points.md](architecture/pain-points.md)** - Detailed embedded development challenges
+- **[architecture/core-principles.md](architecture/core-principles.md)** - Design philosophy and fundamental contracts
 
 **Implementation Details:**
 - **[implementations/platform-integration.md](implementations/platform-integration.md)** - How to connect hardware to HAL implementations
 
 ### 🔧 Current Status & Planning
 
-- **[challenges.md](challenges.md)** - Current ecosystem challenges and trade-offs *(Coming Soon)*
-- **[ecosystem-registry.md](ecosystem-registry.md)** - Component compatibility matrix *(Coming Soon)*
+- **[challenges.md](challenges.md)** - Current ecosystem challenges and trade-offs
 
 ### 📖 External References
 
@@ -36,30 +33,28 @@ This directory contains comprehensive documentation for understanding, using, an
 
 ## 🚀 Quick Navigation
 
-**New to the ecosystem?**  
-[motivation.md](motivation.md) → [architecture/overview.md](architecture/overview.md) → [../WEST_COMMANDS.md](../WEST_COMMANDS.md)
+**New to the ecosystem?**
+[getting-started.md](getting-started.md) → [motivation.md](motivation.md) → [architecture/overview.md](architecture/overview.md)
 
-**Want to implement a driver?**  
+**Want to implement a driver?**
 [architecture/core-principles.md](architecture/core-principles.md) → [implementations/platform-integration.md](implementations/platform-integration.md)
 
-**Adding platform support?**  
+**Adding platform support?**
 [architecture/overview.md](architecture/overview.md) → [implementations/platform-integration.md](implementations/platform-integration.md)
 
-**Building applications?**  
-[../WEST_COMMANDS.md](../WEST_COMMANDS.md) → [ecosystem-registry.md](ecosystem-registry.md) *(Coming Soon)*
+**Building applications?**
+[getting-started.md](getting-started.md) → [../WEST_COMMANDS.md](../WEST_COMMANDS.md)
 
 ## 📝 Documentation Status
 
 | Document | Status | Description |
 |----------|---------|-------------|
-| [index.md](index.md) | ✅ Complete | Main landing page |
+| [getting-started.md](getting-started.md) | ✅ Complete | Quick start guide (5 minutes to first build) |
 | [motivation.md](motivation.md) | ✅ Complete | Problem summary |
 | [architecture/overview.md](architecture/overview.md) | ✅ Complete | Full architecture guide |
 | [architecture/core-principles.md](architecture/core-principles.md) | ✅ Complete | Design principles |
-| [architecture/pain-points.md](architecture/pain-points.md) | ✅ Complete | Detailed problem analysis |
-| [implementations/platform-integration.md](implementations/platform-integration.md) | ✅ Complete | Platform integration guide |
-| [challenges.md](challenges.md) | 🗓️ Planned | Current ecosystem challenges |
-| [ecosystem-registry.md](ecosystem-registry.md) | 🗓️ Planned | Component compatibility matrix |
+| [implementations/platform-integration.md](implementations/platform-integration.md) | ✅ Complete | Platform integration guide with examples |
+| [challenges.md](challenges.md) | ✅ Complete | Current ecosystem challenges |
 
 ---
 

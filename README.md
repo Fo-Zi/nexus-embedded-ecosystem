@@ -8,7 +8,7 @@ Started as an exploration of better abstraction patterns in embedded systems, it
 
 **Project components**: HAL interface definitions, platform implementations (ESP32 IDF, STM32 bare-metal), hardware-agnostic drivers, and unified build tooling using West.
 
-→ [Detailed motivation & design philosophy](docs/motivation.md)
+→ [Getting Started Guide](docs/getting-started.md) | [Motivation & Philosophy](docs/motivation.md)
 
 ---
 
@@ -31,6 +31,7 @@ Started as an exploration of better abstraction patterns in embedded systems, it
   - [Future Exploration 🔮](#future-exploration)
 - [⚠️ Challenges & Tradeoffs](#️-challenges--tradeoffs)
 - [🔄 Closing Thoughts](#-closing-thoughts)
+- [📚 Documentation](#-documentation)
 
 ---
 
@@ -68,6 +69,7 @@ bme280_result_t bme280_read_temp(bme280_handle_t *sensor, float *temp) {
 No platform #ifdefs, no vendor-specific APIs. The driver is portable by design.
 
 → [Complete showcase project](https://github.com/Fo-Zi/nexus-showcase-project) - Multi-platform firmware example
+→ [Getting Started Guide](docs/getting-started.md) - Build and run in 5 minutes
 
 ---
 
@@ -102,6 +104,8 @@ These problems became the design constraints for this project.
 
 These goals guide the design, though the specifics continue to evolve based on what works in practice.
 
+→ [Core design principles & contracts](docs/architecture/core-principles.md)
+
 ---
 
 ## 🏛️ Architecture
@@ -130,8 +134,8 @@ nexus-hal-esp32 / nexus-hal-stm32 ← Platform implementations
 
 This structure emerged from trying several approaches—monolithic HALs, plugin systems, compile-time polymorphism—and finding what balanced flexibility with practical constraints.
 
-→ [Architecture deep-dive & design decisions](docs/architecture.md)
-→ [Interface design patterns](docs/core-principles.md)
+→ [Architecture deep-dive & design decisions](docs/architecture/overview.md)
+→ [Interface design patterns](docs/architecture/core-principles.md)
 
 ---
 
@@ -336,7 +340,7 @@ Current approach: Keep interfaces minimal and let platform integration layers ha
 
 These tradeoffs are inherent to hardware abstraction. The goal is finding a balance that works for most use cases while acknowledging the edge cases.
 
-→ [Detailed tradeoff analysis](docs/challenges_and_solutions.md)
+→ [Detailed tradeoff analysis](docs/challenges.md)
 
 ---
 
@@ -349,3 +353,23 @@ Each component taught me something: ESP-IDF implementation about framework integ
 The ecosystem is functional and I use it for my own projects, but it's still evolving. Interfaces will continue to change as I discover better patterns. That's deliberate—I'm iterating toward something that works well in practice, not rushing to a v1.0.0 before the design is validated.
 
 This work demonstrates my approach to systems design: identify real problems, experiment with solutions, make informed tradeoffs, and iterate based on what works. It's as much about the process as the result.
+
+---
+
+## 📚 Documentation
+
+**Getting Started**:
+- [Getting Started Guide](docs/getting-started.md) - 5-minute quick start
+- [Showcase Project](https://github.com/Fo-Zi/nexus-showcase-project) - Complete working example
+
+**Understanding the Ecosystem**:
+- [Motivation](docs/motivation.md) - Problems and design rationale
+- [Architecture Overview](docs/architecture/overview.md) - How the layers work together
+- [Core Principles](docs/architecture/core-principles.md) - Design patterns and contracts
+- [Challenges & Tradeoffs](docs/challenges.md) - Design decisions and limitations
+
+**Building with the Ecosystem**:
+- [Platform Integration Guide](docs/implementations/platform-integration.md) - Create the glue layer
+- [West Commands](WEST_COMMANDS.md) - Build system reference
+
+**Browse all docs**: [docs/](docs/)

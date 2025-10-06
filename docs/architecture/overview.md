@@ -1,22 +1,24 @@
 # Architecture Overview
 
-## Intro
-The Nexus Embedded Ecosystem is built as an attempt to solve the [pain-points] already mentioned.
-The approach I have taken to solve each one of them is as follows:
+The ecosystem uses contract-based design to separate "what" peripherals do from "how" they do it. This document details the architectural layers, data flow, and design patterns.
 
-- Vendor APIs issue -> Create a set of interfaces that are platform-agnostic
-- Testability Difficulty -> Same as previous; Make the interfaces live isolated from any implementation ;
-- Driver Portability -> Make drivers depend **only** on the interfaces ;
-- Versioning and Dependencies -> Each component has its own versioning and lives in its own repo ; Dependencies are pulled using West
+## Core Approach
 
-Instead of depending on platform-specific APIs, we define **contracts** that any platform can implement:
+The architecture addresses portability through four strategies:
+
+- **Vendor lock-in** → Platform-agnostic interface definitions (contracts)
+- **Testability** → Interfaces isolated from implementations
+- **Driver portability** → Drivers depend only on interfaces
+- **Dependency management** → Multi-repo with West, explicit versioning
+
+Drivers depend on contracts, not platform APIs:
 
 ```c
-// Same code works on ESP32, STM32, Nordic, etc.
-#include "nhal_i2c_master.h"
+#include "nhal_i2c_master.h"  // Works on ESP32, STM32, etc.
+
 void read_sensor(struct nhal_i2c_context *i2c) {
     uint8_t data[6];
-    nhal_i2c_master_read(i2c, 0x76, data, 6);
+    nhal_i2c_master_write_read(i2c, 0x76, data, 6);
 }
 ```
 
@@ -24,12 +26,12 @@ void read_sensor(struct nhal_i2c_context *i2c) {
 
 ### Layer 1: Interface (Contract Definitions)
 
-**Repository**: `nexus-hal-interface`
-**Purpose**: Define what peripherals can do, not how they do it
-**Content**: Header-only C interfaces, no implementation code
+**Repository**: [`nexus-hal-interface`](https://github.com/Fo-Zi/nexus-hal-interface)
+**Purpose**: Define peripheral behavior contracts
+**Content**: Header-only C interfaces
 
 ```c
-// nhal_i2c_master.h - Defines the contract
+// nhal_i2c_master.h
 nhal_result_t nhal_i2c_master_write(
     struct nhal_i2c_context *i2c_ctx,
     uint8_t dev_address,
@@ -38,237 +40,189 @@ nhal_result_t nhal_i2c_master_write(
 );
 ```
 
-**Key characteristics**:
-- Platform-agnostic function signatures
+**Design patterns**:
+- Context-based (no globals)
 - Standardized error codes (`nhal_result_t`)
-- Context-based design (no global state)
 - Opaque implementation structures
+- State machine contracts (init → configure → operate)
 
-### Layer 2: Implementation (Platform-Specific Code)
+### Layer 2: Implementation (Platform HAL)
 
-**Repositories**: `nexus-hal-esp32`, `nexus-hal-stm32`, etc.
-**Purpose**: Fulfill the interface contracts for specific platforms
-**Content**: C source files that implement the interface functions
+**Repositories**: [`nexus-hal-esp32-idf`](https://github.com/Fo-Zi/nexus-hal-esp32), [`nexus-llhal-stm32f103`](https://github.com/Fo-Zi/nexus-llhal-stm32f103)
+**Purpose**: Fulfill interface contracts for specific platforms
+**Content**: Platform-specific implementations
 
 ```c
-// nhal_i2c.c in nexus-hal-esp32
+// nhal_i2c.c in nexus-hal-esp32-idf
 nhal_result_t nhal_i2c_master_write(
     struct nhal_i2c_context *i2c_ctx,
     uint8_t dev_address,
     const uint8_t *data,
     size_t len
 ) {
-    // ESP-IDF specific implementation
     esp_err_t result = i2c_master_write_to_device(
-        i2c_ctx->i2c_bus_id,
-        dev_address,
-        data, len,
+        i2c_ctx->i2c_bus_id, dev_address, data, len,
         pdMS_TO_TICKS(i2c_ctx->impl_ctx->timeout)
     );
-    return nhal_map_esp_err(result);
+    return nhal_map_esp_err(result);  // Map platform errors to NHAL_RESULT
 }
 ```
 
 **Implementation freedom**:
-- As long as you fulfill the contracts, the implementations have total freedom.
-- The implementation details are opaque to drivers, but not to the Platform Integration Layer
-    - This means that **the implementation** chooses what to expose and what to omit.
-    - You could have total and fine grain control over configuration details in this layer if needed.
-- The interface implementation and Platform Integration Layer decide the memory allocation scheme used.
+- Choose synchronization primitives (mutexes, critical sections, lock-free)
+- Control memory allocation strategy (static, dynamic, hybrid)
+- Optimize for platform strengths (DMA, interrupts, polling)
+- Expose platform-specific config through `impl_ctx` structures
 
 
-### Layer 3: Drivers (Device-Specific Logic)
+### Layer 3: Drivers (Hardware-Agnostic)
 
-**Repositories**: `nexus-bme280`, `nexus-ds3231`, etc.
-**Purpose**: Control specific devices using only interface contracts
-**Content**: Device drivers that work on any compliant implementation
+**Repositories**: [`nexus-dht11`](https://github.com/Fo-Zi/nexus-dht11), [`nexus-rtc-ds3231`](https://github.com/Fo-Zi/nexus-rtc-ds3231), [`nexus-eeprom-24c32`](https://github.com/Fo-Zi/nexus-eeprom-24c32)
+**Purpose**: Control devices using only interface contracts
+**Content**: Platform-independent drivers
 
 ```c
-// bme280.c - Works on any platform
-#include "nhal_i2c_master.h"  // ← Only interface dependency
+// ds3231.c - RTC driver works on any platform
+#include "nhal_i2c_master.h"  // Only interface dependency
 
-bme280_result_t bme280_read_temperature(bme280_handle_t *handle, float *temp) {
-    uint8_t reg_addr = BME280_REG_TEMP_MSB;
-    uint8_t data[3];
+ds3231_result_t ds3231_read_time(ds3231_handle_t *handle, ds3231_time_t *time) {
+    uint8_t reg_addr = DS3231_REG_TIME;
+    uint8_t data[7];
 
     nhal_result_t result = nhal_i2c_master_write_read_reg(
         handle->i2c_ctx,
-        handle->dev_addr,
+        DS3231_I2C_ADDR,
         &reg_addr, 1,
         data, sizeof(data)
     );
 
     if (result == NHAL_OK) {
-        // Process raw temperature data
-        int32_t raw_temp = (data[0] << 12) | (data[1] << 4) | (data[2] >> 4);
-        *temp = compensate_temperature(handle, raw_temp);
-        return BME280_OK;
+        time->seconds = bcd_to_dec(data[0]);
+        time->minutes = bcd_to_dec(data[1]);
+        time->hours = bcd_to_dec(data[2]);
+        return DS3231_OK;
     }
 
-    return result;
+    return DS3231_ERROR_I2C;
 }
 ```
 
-### Layer 4: Platform Integration (Your Application Glue)
+**Key principle**: Drivers never know what platform they're running on.
 
-**Not part of the ecosystem** - every project is different
-**Purpose**: Connect your specific hardware to the HAL implementation
-**Content**: Hardware configuration, context management, initialization
+### Layer 4: Platform Integration (Application Glue)
 
-While there's no universal way of implementing it, I usually have a header that defines
-**logical-user-friendly** resources definitions and helpers:
+**Not part of the ecosystem** - application-specific
+**Purpose**: Map logical resources to physical hardware
+**Content**: Hardware configuration, context management
+
+This layer translates your application's logical resources (I2C_BUS_SENSORS, PIN_LED) to physical hardware (GPIO2, I2C0 port). The pattern I use:
+
+**Define logical resources:**
 ```c
-// platform_config.h - Ideally doesn't expose any platform specifics, declares what HW resources the project uses
-
-// Pins ->
+// platform_config.h - Application view of hardware
 typedef enum {
-    PIN_LED_GREEN,
-    PIN_RTC_INTERRUPT,
-    // +++++
-    PIN_TOTAL_NUM,
-}Pin_Func;
+    PIN_LED_STATUS,
+    PIN_DHT11_DATA,
+    PIN_TOTAL
+} pin_id_t;
 
-// I2C buses ->
 typedef enum {
-    I2C_BUS_0, // RTC xxx, Data EEPROM xxx, Sensor X
-    I2C_BUS_1, // Config EEPROM xxx
-    // +++++
-    I2C_TOTAL_NUM,
-}I2C_BusFunc;
+    I2C_BUS_SENSORS,  // RTC, EEPROM, BME280
+    I2C_BUS_DISPLAY,  // OLED display
+    I2C_TOTAL
+} i2c_bus_id_t;
 
-// ******
-
-// This method will iterate over each peripheral set and initialize/configure it ->
 void platform_init(void);
-
-struct * nhal_i2c_ctx platform_get_i2c_ctx(I2C_BusFunc i2c_bus); // <- How upper layers get the contexts drivers need
-struct * nhal_pin_ctx platform_get_pin_ctx(Pin_Func pin_func); // <- How upper layers get the contexts drivers need
-
+nhal_i2c_context* platform_get_i2c(i2c_bus_id_t bus);
+nhal_pin_context* platform_get_pin(pin_id_t pin);
 ```
 
-Then, the associated source **IS** necessarily platform-specific, since it will **translate** the resources
-you will use to a specific board layout/platform:
+**Map to physical hardware (platform-specific):**
 ```c
-// platform_config.c - Links implementation with specific project resources (pins, buses, ports, etc)
+// platform_config.c for ESP32
 #include "nhal_esp32_helpers.h"
 
-// NHAL_ESP32_PIN_BUILD(name        , pin_number, direction             , pullup_enable , pulldown_enable   , interrupt_type    )
-NHAL_ESP32_PIN_BUILD(  rtc_interrupt, 2         , NHAL_PIN_DIR_INPUT    , 1             , 0                 , 0                 )
+// Maps PIN_DHT11_DATA to GPIO 4 with pull-up
+NHAL_ESP32_PIN_BUILD(dht11_data, 4, NHAL_PIN_DIR_BIDIR, 1, 0, 0)
 
 void platform_init(void) {
+    nhal_pin_context *ctx = NHAL_ESP32_PIN_CONTEXT_REF(dht11_data);
+    nhal_pin_config *cfg = NHAL_ESP32_PIN_CONFIG_REF(dht11_data);
 
-    nhal_pin_context * rtc_pin_ctx = NHAL_ESP32_PIN_CONTEXT_REF(rtc_interrupt);
-    nhal_pin_config  * rtc_pin_cfg = NHAL_ESP32_PIN_CONFIG_REF(rtc_interrupt);
-
-    nhal_result_t result = nhal_pin_init(rtc_pin_ctx);
-    if (result != NHAL_OK) {
-        LOG_ERR("PLATFORM", "Failed to initialize pin: %d", result);
-        return result;
-    }
-    LOG_INFO("PLATFORM", "Setting pin %d config...", i);
-    result = nhal_pin_set_config(rtc_pin_ctx, rtc_pin_cfg);
-    if (result != NHAL_OK) {
-        LOG_ERR("PLATFORM", "Failed to set pin: %d", result);
-        return result;
-    }
-    LOG_INFO("PLATFORM", "Pin initialized successfully");
-
+    nhal_pin_init(ctx);
+    nhal_pin_set_config(ctx, cfg);
 }
 ```
 
-This layer handles:
-- Pin assignments and hardware routing
-- Clock configuration and power management
-- Context creation and lifecycle management
-- Platform-specific initialization sequences
+The same `platform_config.h` works across platforms—only the `.c` file changes when porting.
 
-## Data Flow Example
+→ [Complete integration example](https://github.com/Fo-Zi/nexus-showcase-project)
 
-Here's how a temperature reading flows through the architecture:
+## Data Flow
+
+Temperature reading through the layers:
 
 ```
-1. Application calls: bme280_read_temperature(&sensor, &temp)
-                                    ↓
-2. BME280 driver calls: nhal_i2c_master_write_read_reg(ctx, ...)
-                                    ↓
-3. ESP32 implementation: i2c_master_write_read_device(bus, ...)
-                                    ↓
-4. ESP-IDF driver: Hardware I2C transaction
-                                    ↓
-5. Result bubbles back up through each layer
+1. Application        → ds3231_read_time(&rtc, &time)
+2. Driver            → nhal_i2c_master_write_read_reg(ctx, DS3231_ADDR, ...)
+3. HAL (ESP32)       → i2c_master_write_read_device(bus, ...)
+4. Platform Driver   → Hardware I2C transaction
+5. Result propagates back up through each layer
 ```
 
-Each layer only knows about the layer directly below it. The BME280 driver has no idea it's running on ESP32 vs STM32.
-> [!NOTE]
-> This is a rather bloated example where the NHAL is merely a wrapper over another HAL!
-> Since the interface is not tied to any specific implementation, the latter can be optimized as much
-> as needed and wanted, even using raw assembly or register manipulation implementation.
+Each layer only knows the layer directly below it. The DS3231 driver doesn't know if it's running on ESP32, STM32, or another platform.
+
+**Note**: ESP32 implementation wraps ESP-IDF, which itself wraps hardware. This is convenient but adds overhead. The STM32 bare-metal implementation goes directly to registers—same interface, different optimization strategy.
 
 ## Context-Based Design
 
-Instead of global peripheral instances (`I2C1`, `SPI0`), everything works with contexts:
+No globals. Everything operates on context structures:
 
 ```c
 struct nhal_i2c_context {
-    nhal_i2c_bus_id i2c_bus_id;
-    struct nhal_i2c_impl_ctx *impl_ctx;  // ← Implementation-specific data
+    nhal_i2c_bus_id bus_id;
+    struct nhal_i2c_impl_ctx *impl_ctx;  // Implementation-specific
 };
+
+// Usage
+nhal_i2c_context *i2c = platform_get_i2c(I2C_BUS_SENSORS);
+nhal_i2c_master_write(i2c, addr, data, len);
 ```
 
-**Benefits**:
-- **Multiple instances**: Multiple I2C buses, same interface
-- **Testability**: Easy to inject mock contexts
-- **Thread safety**: Implementation can add mutexes or other to context
-- **State encapsulation**: No global variables, clear ownership
+**Why contexts**:
+- **Multiple instances**: Same interface, different buses
+- **Testability**: Inject mock contexts for unit tests
+- **Thread safety**: Implementations can embed mutexes in `impl_ctx`
+- **Explicit ownership**: Application owns contexts, HAL initializes them
 
-## Implementation Contracts
+## Implementation Requirements
 
-Every implementation must:
+HAL implementations must fulfill these contracts:
 
-1. **Implement all interface functions** with documented behavior
-2. **Follow the state machine** (uninitialized → initialized → configured → operational)
-3. **Return appropriate error codes** mapped from platform errors
-5. **Document allocation behavior** (what gets allocated when)
-6. **Document threading model** (thread-safe, not thread-safe, per-context safety)
+1. **Implement interface functions** with documented behavior
+2. **Follow state machine**: uninitialized → initialized → configured → operational
+3. **Map error codes**: Platform errors → `nhal_result_t`
+4. **Document allocation**: What gets allocated when (static/dynamic)
+5. **Document thread safety**: Per-context, global, or none
 
-## Benefits of This Architecture
+Drivers can trust these contracts across all platforms.
 
-**For Application Developers**:
-- Write drivers and application code once, run on any supported platform
-- Easy unit testing with mock implementations
-- Clear separation of concerns
-- No vendor lock-in
+## What This Provides
 
-**For Driver Writing**:
-- Same interface (contract) accross different platforms
-- Testable without hardware
+**Portability**: Write once, deploy on ESP32, STM32, or any platform with a HAL implementation
 
-**For Platform Implementers**:
-- Freedom to optimize for platform strengths
-- Can focus on platform integration, not driver logic
-- Clear contracts to implement
+**Testability**: Mock implementations for unit testing without hardware
 
-## Trade-offs
+**Modularity**: Drivers and platforms evolve independently
 
-**Advantages**:
-- Code portability
-- Good testability
-- Separation of concerns
-- Implementation flexibility
+**Flexibility**: Implementations optimize for their constraints (RTOS vs bare-metal, performance vs memory)
 
-**Disadvantages**:
-- Since for some peripherals the configuration varies a lot through different platforms:
-    - A big deal of configuration for these **IS** implementation specific
-    - You can configure it fully in the Platform Integration Layer still, but if you want to
-    for example allow for reconfiguration at runtime, then you'll be obligued to use platform-specific
-    code for it. (This would be applicable to any framework, but still worht mentioning)
-- Integration complexity for Platform Integration Layer
-    - Since there are nested pointers to implementation specific data on both context and config structures,
-    initializing both can be annoying (The interface takes **pointers** to these, so you must allocate it)
-    - Because of this issue, implementations could provide "builders" as Macros or other, that help
-    ease the initialization. I do this with all the implementations of the ecosystem, documentation can be found
-    at []
-- More effort needed to get to a first "blinky" project
-    - Since you need to implement the Platform Integration Layer before anything, it needs more time upfront.
-    - This lost time should be quickly compensated by the time saved on porting and rewriting drivers and
-    application code.
+## Tradeoffs
+
+**Platform integration overhead**: Mapping logical resources to hardware takes upfront time. Helper macros reduce boilerplate, but you're still setting up more infrastructure than using vendor HAL directly.
+
+**Configuration complexity**: Some peripherals have vastly different config options across platforms. The interface can't abstract everything—platform-specific configuration exists in `impl_ctx` structures. Runtime reconfiguration often requires platform-specific code.
+
+**Initial steeper curve**: Getting to "blinky" takes longer—you need the platform integration layer first. Time investment pays off when porting or testing, less so for single-platform prototypes.
+
+→ [Detailed tradeoff analysis](../challenges.md)
